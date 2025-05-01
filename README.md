@@ -1,82 +1,145 @@
-# Shift Management System 📊
+# Shift Management Dashboard
 
-A streamlined web application for managing and analyzing employee shift data across multiple cities and contracts.
+A streamlined dashboard for managing employee shifts, built with Streamlit and Google Sheets integration.
+
+![Talabat ESM Team](talabat_logo_wobble.gif)
 
 ## Features
 
-- 📈 Interactive data visualization and reporting
-- 📁 Support for multiple file formats (Excel, CSV)
-- 🔄 Automatic column name detection and normalization
-- 📊 Contract-wise and city-wise reports
-- 📅 Date-based shift analysis
-- ⬇️ Export reports to Excel
+- 📊 Real-time data synchronization with Google Sheets
+- 📅 Daily shift management and overview
+- 🏢 Contract-wise and city-wise reports
+- 📈 Assignment rate tracking
+- 🔄 Automatic data refresh
+- 📱 Responsive design
 
-## Requirements
+## Setup Instructions for New Users
 
-- Python 3.8 or higher
-- pip (Python package installer)
+### 1. Install Required Software
 
-## Installation
+1. Download and install Python from [python.org](https://www.python.org/downloads/)
+   - During installation, make sure to check "Add Python to PATH"
+   - Click "Install Now" with recommended options
 
-1. Clone this repository or download the files
-2. Open a terminal/command prompt in the project directory
-3. Install the required packages:
+2. Download and install Git from [git-scm.com](https://git-scm.com/downloads)
+   - Use default installation options
 
-```bash
-pip install -r requirements.txt
-```
+3. Download and install GitHub Desktop from [desktop.github.com](https://desktop.github.com/)
+   - This provides an easy-to-use interface for managing the project
 
-## Running the Application
+### 2. Get the Project
 
-1. Open a terminal/command prompt in the project directory
-2. Run the following command:
+1. Open GitHub Desktop
+2. Click on "File" → "Clone Repository"
+3. Enter URL: `https://github.com/Mohmedragab2398/shift-automation`
+4. Choose where to save it on your computer
+5. Click "Clone"
 
-```bash
-streamlit run app.py
-```
+### 3. Set Up the Project
 
-3. Your default web browser will open automatically with the application
+1. Open Command Prompt (Windows):
+   - Press Win + R
+   - Type "cmd" and press Enter
 
-## Using the Application
+2. Navigate to project folder:
+   ```bash
+   cd path/to/your/project
+   ```
 
-1. **Upload Employee Data**
-   - Use the sidebar to upload your employee master data file (All.xlsx)
-   - Required columns: employee_id, employee_name, contract_name, city
-   - Supports Excel (.xlsx, .xls, .xlsb, .xlsm) and CSV formats
+3. Create virtual environment:
+   ```bash
+   python -m venv venv
+   ```
 
-2. **Upload City Files**
-   - Upload one or more city shift files
-   - Required columns: employee_id, shift_status, planned_start_time, planned_end_time
-   - The system will automatically merge and process all files
+4. Activate virtual environment:
+   ```bash
+   venv\Scripts\activate
+   ```
 
-3. **Select Dates**
-   - Choose one or more dates to analyze from the calendar in the sidebar
+5. Install requirements:
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-4. **Process Data**
-   - Click the "Process Data" button to generate reports
-   - The system will validate your data and display any errors
+### 4. Configure Google Sheets Access
 
-5. **View Reports**
-   - Contract Reports: Shows metrics by contract and city
-   - City Reports: Displays city-wise statistics with visualizations
-   - Shifts Update: Provides detailed shift information for selected dates
+1. Create `.streamlit` folder in project directory (if not exists)
+2. Create `secrets.toml` file inside `.streamlit` folder
+3. Add your Google Sheets credentials:
+   ```toml
+   [gcp_service_account]
+   type = "service_account"
+   project_id = "your-project-id"
+   private_key_id = "your-private-key-id"
+   private_key = "your-private-key"
+   client_email = "your-client-email"
+   client_id = "your-client-id"
+   auth_uri = "https://accounts.google.com/o/oauth2/auth"
+   token_uri = "https://oauth2.googleapis.com/token"
+   auth_provider_x509_cert_url = "https://www.googleapis.com/oauth2/v1/certs"
+   client_x509_cert_url = "your-cert-url"
 
-6. **Download Reports**
-   - Each report can be downloaded as an Excel file
-   - Click the download button below each report
+   [google_sheets]
+   spreadsheet_id = "your-spreadsheet-id"
+   ```
+
+### 5. Run the Application
+
+1. In Command Prompt (with venv activated):
+   ```bash
+   streamlit run app.py
+   ```
+
+2. The dashboard will open in your default web browser
+
+## Usage Guide
+
+### Employee Data Management
+
+1. Employee data is automatically loaded from Google Sheets
+2. Click "Refresh Employee Data" to update the data
+3. The sheet must be shared with the service account email
+
+### City Files Upload
+
+1. Prepare CSV files with required columns:
+   - Employee ID
+   - Employee Name
+   - Contract Name
+   - Shift Status
+   - Planned Start/End Date
+   - Planned Start/End Time
+
+2. Upload files using the "Upload City Files" section
+
+### Reports and Analysis
+
+- **Overview**: Shows total metrics and distributions
+- **Daily Shifts**: Detailed view of shifts for each date
+- **Unassigned Employees**: Lists employees without shifts
+- **Contract Report**: Analysis by contract
+- **City Report**: Analysis by city
 
 ## Troubleshooting
 
 If you encounter any issues:
 
-1. Ensure all required columns are present in your files
-2. Check that date formats are consistent
-3. Verify that employee IDs match between files
-4. Make sure you have selected at least one date
+1. Make sure Python and all requirements are installed
+2. Check Google Sheets credentials and permissions
+3. Verify CSV file format matches requirements
+4. Try refreshing the page or restarting the application
 
 ## Support
 
-For any questions or issues, please open an issue in the repository or contact the development team.
+For help or questions, contact:
+- Mohamed Ragab (Project Lead)
+
+## Updates
+
+To get the latest updates:
+1. Open GitHub Desktop
+2. Click "Fetch origin"
+3. Click "Pull origin" if updates are available
 
 # Data Sanitization Module
 
