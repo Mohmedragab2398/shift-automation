@@ -1,3 +1,4 @@
+# Force redeploy with openpyxl dependency
 import streamlit as st
 import pandas as pd
 import plotly.express as px
