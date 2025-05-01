@@ -790,3 +790,25 @@ class DataProcessor:
         except Exception as e:
             print(f"Error getting shifts for date {date}: {str(e)}")
             return pd.DataFrame()
+
+    def style_dataframe(self, df, percentage_cols, add_grand_total=False):
+        """Style a DataFrame for display"""
+        styled_df = df.style.format(
+            {col: '{:.2f}%' for col in percentage_cols if col in df.columns}
+        )
+        
+        if add_grand_total:
+            total_row = df.iloc[-1].copy()
+            total_row.name = 'Grand Total'
+            styled_df.append(total_row.style)
+        
+        return styled_df
+
+    def display_city_report(self, date_data):
+        """Display a styled city report"""
+        styled_report = self.style_dataframe(
+            date_data[['Contract', 'Total', 'Assigned', 'Unassigned', 'Assigned_Percentage']],
+            ['Assigned_Percentage'],
+            add_grand_total=True
+        )
+        return styled_report

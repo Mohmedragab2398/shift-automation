@@ -10,10 +10,13 @@ import logging
 from data_processor import DataProcessor
 from sheets_connector import SheetsConnector
 import os
+import gspread
+from google.oauth2.service_account import Credentials
+import pprint
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
@@ -23,6 +26,39 @@ st.set_page_config(page_title="Shift Management Dashboard", layout="wide")
 # Custom CSS for styling
 st.markdown("""
 <style>
+    .logo-container {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        margin-bottom: 30px;
+    }
+    .logo-text {
+        color: #FF5A00;
+        font-family: Arial, sans-serif;
+        font-weight: 900;
+        font-size: 72px;
+        line-height: 1;
+        letter-spacing: -1px;
+    }
+    .team-text {
+        color: #FF5A00;
+        font-family: Arial, sans-serif;
+        font-weight: 900;
+        font-size: 36px;
+        margin-left: 360px;
+        margin-top: -25px;
+        display: inline-block;
+    }
+    @keyframes wobble {
+        0% { transform: rotate(0deg); }
+        25% { transform: rotate(-1deg); }
+        75% { transform: rotate(1deg); }
+        100% { transform: rotate(0deg); }
+    }
+    .wobble {
+        animation: wobble 2s ease-in-out infinite;
+        display: inline-block;
+    }
     .stDataFrame {
         font-size: 14px;
     }
@@ -88,9 +124,37 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Initialize Google Sheets connector
-sheets_connector = SheetsConnector('service_account.json')
-SPREADSHEET_ID = '1VmWRo_RRM2hxphSrFaZHe8eairN4mTwpw2BYqHuICp4'
+# Create a container for the header section
+header_container = st.container()
+
+# Create two columns for logo and credit text
+with header_container:
+    left_col, right_col = st.columns([1, 1])
+    
+    # Logo on the left
+    with left_col:
+        st.markdown(
+            '<div class="logo-container wobble">'
+            '<div class="logo-text">talabat ESM</div>'
+            '<div class="team-text">Team</div>'
+            '</div>',
+            unsafe_allow_html=True
+        )
+        
+    # Credit text on the right
+    with right_col:
+        st.markdown(
+            "<div style='text-align: right; color: #666666; padding: 20px 0;'>"
+            "Designed by Mohamed Ragab"
+            "</div>",
+            unsafe_allow_html=True
+        )
+
+# Main title
+st.markdown(
+    '<h1 style="text-align: center; margin: 20px 0;">Shift Management Dashboard</h1>',
+    unsafe_allow_html=True
+)
 
 def style_percentage(val):
     """Style percentage values with color thresholds"""
@@ -107,38 +171,66 @@ def style_percentage(val):
     except (ValueError, TypeError):
         return ''
 
-def style_dataframe(df, percentage_cols=None):
-    """Style percentage values with color thresholds"""
+def style_dataframe(df, percentage_cols=None, add_grand_total=False):
+    """Display percentage values without conditional formatting, and optionally add a Grand Total row."""
     if percentage_cols is None:
         percentage_cols = []
     
     if df.empty:
         return df.style
-        
-    # Only apply styling to columns that exist in the DataFrame
+
+    # Create a copy to avoid modifying the original dataframe
+    df = df.copy()
+
+    # Only apply formatting to columns that exist in the DataFrame
     existing_percentage_cols = [col for col in percentage_cols if col in df.columns]
-    numeric_cols = ['Total', 'Assigned', 'Unassigned']
-    existing_numeric_cols = [col for col in numeric_cols if col in df.columns]
+    numeric_cols = [col for col in df.columns if df[col].dtype in [int, float] or pd.api.types.is_numeric_dtype(df[col])]
     
+    # Calculate percentages for all rows before adding Grand Total
+    for col in df.columns:
+        if 'Percentage' in col:
+            # Get the corresponding Assigned and Total columns
+            date_prefix = col.split('_Percentage')[0]
+            assigned_col = f"{date_prefix}_Assigned" if date_prefix else "Assigned"
+            total_col = "Total"
+            
+            if assigned_col in df.columns and total_col in df.columns:
+                # Calculate percentage for each row
+                df[col] = (df[assigned_col].apply(pd.to_numeric, errors='coerce') / 
+                          df[total_col].apply(pd.to_numeric, errors='coerce') * 100)
+    
+    # Optionally add Grand Total row
+    if add_grand_total:
+        total_row = {}
+        for col in df.columns:
+            if col in numeric_cols and 'percentage' not in col.lower():
+                # For numeric columns (excluding percentage columns), sum the values
+                total_row[col] = df[col].apply(pd.to_numeric, errors='coerce').sum()
+            elif 'Percentage' in col:
+                # Calculate the average of the percentage values
+                percentage_values = df[col].dropna()
+                if not percentage_values.empty:
+                    avg_percentage = percentage_values.mean()
+                    total_row[col] = avg_percentage
+                else:
+                    total_row[col] = 0.0
+            elif col.lower() in ['city', 'contract']:
+                total_row[col] = 'Grand Total'
+            else:
+                total_row[col] = ''
+        
+        df = pd.concat([df, pd.DataFrame([total_row])], ignore_index=True)
+
     # Create format dictionary
-    format_dict = {col: '{:,.0f}' for col in existing_numeric_cols}
-    format_dict.update({col: '{:.1f}%' for col in existing_percentage_cols})
-    
-    # Create the styler object with formatting
+    format_dict = {col: '{:,.0f}' for col in numeric_cols if 'percentage' not in col.lower()}
+    format_dict.update({col: '{:.1f}%' for col in df.columns if 'Percentage' in col})
+
     styler = df.style.format(format_dict)
-    
-    # Apply percentage styling
-    for col in existing_percentage_cols:
-        styler = styler.applymap(style_percentage, subset=[col])
-    
-    # Apply table styles
     styler = styler.set_properties(**{
         'text-align': 'center',
         'font-size': '14px',
         'padding': '8px'
     })
-    
-    # Set header styles
     styler = styler.set_table_styles([{
         'selector': 'th',
         'props': [
@@ -150,7 +242,6 @@ def style_dataframe(df, percentage_cols=None):
             ('white-space', 'nowrap')
         ]
     }])
-    
     return styler
 
 def display_overview(employee_df, shift_df, contract_report_df, city_report_df):
@@ -406,7 +497,7 @@ def display_contract_report(data, employee_data):
                 if summary_data:
                     summary_df = pd.DataFrame(summary_data)
                     percentage_cols = [col for col in summary_df.columns if col.endswith('_Percentage')]
-                    styled_summary = style_dataframe(summary_df, percentage_cols)
+                    styled_summary = style_dataframe(summary_df, percentage_cols, add_grand_total=True)
                     st.dataframe(styled_summary, use_container_width=True)
     except Exception as e:
         st.error(f"Error in contract report display: {str(e)}")
@@ -415,26 +506,24 @@ def display_contract_report(data, employee_data):
 def display_city_report(data, employee_data):
     """Display city-wise report with enhanced validation and styling."""
     st.header("City Report")
-    
     try:
         # Input validation
         if data is None or employee_data is None or data.empty or employee_data.empty:
             st.warning("No data available for city report")
             return
-        
+
         # Generate city report
         report = DataSanitizer.generate_city_report(data, employee_data)
         if report.empty:
             st.warning("No data available for city report")
             return
-        
+
         # Get unique dates and cities
         dates = sorted(data['planned_start_date'].unique())
         cities = sorted(report['City'].unique())
-        
+
         # Create tabs for each city
         tabs = st.tabs(cities)
-        
         for i, city in enumerate(cities):
             with tabs[i]:
                 city_data = report[report['City'] == city].copy()
@@ -442,49 +531,49 @@ def display_city_report(data, employee_data):
                 # Create a table for each date
                 for date in dates:
                     date_str = pd.to_datetime(date).strftime('%d-%m')
-                    st.markdown(f"#### {date_str}")
-                    
                     date_data = city_data[city_data['Date'] == date].copy()
+                    
                     if not date_data.empty:
+                        st.markdown(f"#### {date_str}")
                         date_data = date_data.sort_values('Contract')
                         styled_report = style_dataframe(
                             date_data[['Contract', 'Total', 'Assigned', 'Unassigned', 'Assigned_Percentage']],
-                            ['Assigned_Percentage']
+                            ['Assigned_Percentage'],
+                            add_grand_total=True
                         )
                         st.dataframe(styled_report, use_container_width=True)
-                    else:
-                        st.info(f"No data available for {date_str}")
                 
                 # Create side-by-side summary table
-                st.markdown("### Summary View (All Dates)")
-                summary_data = []
-                contracts = sorted(city_data['Contract'].unique())
-                
-                for contract in contracts:
-                    row = {'Contract': contract}
-                    for date in dates:
-                        date_str = pd.to_datetime(date).strftime('%d-%m')
-                        date_contract_data = city_data[
-                            (city_data['Date'] == date) & 
-                            (city_data['Contract'] == contract)
-                        ]
-                        
-                        if not date_contract_data.empty:
-                            row[f'{date_str}_Assigned'] = date_contract_data['Assigned'].iloc[0]
-                            row[f'{date_str}_Unassigned'] = date_contract_data['Unassigned'].iloc[0]
-                            row[f'{date_str}_Percentage'] = date_contract_data['Assigned_Percentage'].iloc[0]
-                        else:
-                            row[f'{date_str}_Assigned'] = 0
-                            row[f'{date_str}_Unassigned'] = 0
-                            row[f'{date_str}_Percentage'] = 0.0
+                if not city_data.empty:
+                    st.markdown("### Summary View (All Dates)")
+                    summary_data = []
+                    contracts = sorted(city_data['Contract'].unique())
                     
-                    summary_data.append(row)
-                
-                if summary_data:
-                    summary_df = pd.DataFrame(summary_data)
-                    percentage_cols = [col for col in summary_df.columns if col.endswith('_Percentage')]
-                    styled_summary = style_dataframe(summary_df, percentage_cols)
-                    st.dataframe(styled_summary, use_container_width=True)
+                    for contract in contracts:
+                        row = {'Contract': contract}
+                        for date in dates:
+                            date_str = pd.to_datetime(date).strftime('%d-%m')
+                            date_contract_data = city_data[
+                                (city_data['Date'] == date) & 
+                                (city_data['Contract'] == contract)
+                            ]
+                            
+                            if not date_contract_data.empty:
+                                row[f'{date_str}_Assigned'] = date_contract_data['Assigned'].iloc[0]
+                                row[f'{date_str}_Unassigned'] = date_contract_data['Unassigned'].iloc[0]
+                                row[f'{date_str}_Percentage'] = date_contract_data['Assigned_Percentage'].iloc[0]
+                            else:
+                                row[f'{date_str}_Assigned'] = 0
+                                row[f'{date_str}_Unassigned'] = 0
+                                row[f'{date_str}_Percentage'] = 0.0
+                        
+                        summary_data.append(row)
+                    
+                    if summary_data:
+                        summary_df = pd.DataFrame(summary_data)
+                        percentage_cols = [col for col in summary_df.columns if col.endswith('_Percentage')]
+                        styled_summary = style_dataframe(summary_df, percentage_cols, add_grand_total=True)
+                        st.dataframe(styled_summary, use_container_width=True)
                 
     except Exception as e:
         st.error(f"Error in city report display: {str(e)}")
@@ -492,6 +581,26 @@ def display_city_report(data, employee_data):
 
 def main():
     st.title("Shift Management Dashboard")
+    
+    # Initialize Google Sheets connector
+    try:
+        sheets_connector = SheetsConnector()
+        SPREADSHEET_ID = st.secrets["spreadsheet_id"]
+        
+        if 'sheets_connector' not in st.session_state:
+            st.session_state['sheets_connector'] = sheets_connector
+            
+    except Exception as e:
+        st.error(f"Error initializing Google Sheets: {str(e)}")
+        st.markdown("""
+        Please check:
+        1. The sheet is shared with: `sheet-accessa@shift-automation-458000.iam.gserviceaccount.com`
+        2. The sheet contains data in the 'all2' tab
+        3. The sheet ID is correct in .streamlit/secrets.toml
+        4. You have enabled the Google Sheets API in your Google Cloud Console
+        """)
+        return
+
     col1, col2 = st.columns(2)
 
     # Employee data from Google Sheets
@@ -500,20 +609,36 @@ def main():
         if st.button("Refresh Employee Data"):
             st.session_state['employee_refresh'] = True
 
+        employee_df = None  # Initialize to avoid unbound error
+
         if 'employee_df' not in st.session_state or st.session_state.get('employee_refresh', False):
             with st.spinner("Loading employee data from Google Sheets..."):
-                employee_df = sheets_connector.read_sheet(
-                    spreadsheet_id=SPREADSHEET_ID,
-                    range_name='all!A1:Z'  # Load all columns
-                )
-                employee_df.columns = [str(col).strip().lower().replace(' ', '_') for col in employee_df.columns]
-                st.session_state['employee_df'] = employee_df
-                st.session_state['employee_refresh'] = False
+                try:
+                    employee_df = st.session_state.sheets_connector.read_sheet(
+                        spreadsheet_id=SPREADSHEET_ID,
+                        range_name='all2!A1:Z'  # Load all columns
+                    )
+                    if employee_df is not None and not employee_df.empty:
+                        employee_df.columns = [str(col).strip().lower().replace(' ', '_') for col in employee_df.columns]
+                        st.session_state['employee_df'] = employee_df
+                        st.session_state['employee_refresh'] = False
+                        st.success(f"Successfully loaded {len(employee_df)} employee records from Google Sheets.")
+                    else:
+                        st.error("No data was returned from Google Sheets. Please check:")
+                        st.markdown("""
+                        1. The sheet is shared with: `sheet-accessa@shift-automation-458000.iam.gserviceaccount.com`
+                        2. The sheet contains data in the 'all2' tab
+                        3. The sheet ID is correct
+                        """)
+                except Exception as e:
+                    st.error(f"Error loading employee data: {str(e)}")
         else:
-            employee_df = st.session_state['employee_df']
+            employee_df = st.session_state.get('employee_df', None)
+            if employee_df is not None and not employee_df.empty:
+                st.success(f"Displaying {len(employee_df)} employee records.")
 
-        st.success("Employee data loaded from Google Sheets.")
-        st.dataframe(employee_df, use_container_width=True)
+        if employee_df is not None and not employee_df.empty:
+            st.dataframe(employee_df, use_container_width=True)
 
     # City file upload remains the same and is always visible
     with col2:

@@ -1,29 +1,54 @@
 import pandas as pd
-from google.oauth2.credentials import Credentials
-from google.oauth2 import service_account
+import streamlit as st
+import gspread
+from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
+import json
 
 class SheetsConnector:
-    def __init__(self, credentials_path=None):
-        """Initialize the Google Sheets connector with service account credentials."""
-        self.SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
-        self.credentials_path = credentials_path
-        self.credentials = None
-        self.service = None
-        if credentials_path:
-            self._authenticate()
+    def __init__(self):
+        """Initialize the Google Sheets connector with service account credentials from Streamlit secrets."""
+        self.SCOPES = [
+            'https://www.googleapis.com/auth/spreadsheets',
+            'https://www.googleapis.com/auth/drive',
+            'https://spreadsheets.google.com/feeds'
+        ]
+        self._authenticate()
 
     def _authenticate(self):
-        """Authenticate with Google Sheets API using service account."""
+        """Authenticate with Google Sheets API using service account from Streamlit secrets."""
         try:
-            self.credentials = service_account.Credentials.from_service_account_file(
-                self.credentials_path, scopes=self.SCOPES
+            # Get the service account info from streamlit secrets
+            service_account_info = dict(st.secrets["gcp_service_account"])
+            
+            # Ensure the private key is properly formatted
+            if isinstance(service_account_info['private_key'], str):
+                service_account_info['private_key'] = service_account_info['private_key'].replace('\\n', '\n')
+            
+            # Create credentials
+            self.credentials = Credentials.from_service_account_info(
+                service_account_info,
+                scopes=self.SCOPES
             )
-            self.service = build('sheets', 'v4', credentials=self.credentials)
+            
+            # Initialize services
+            try:
+                self.service = build('sheets', 'v4', credentials=self.credentials)
+                self.gspread_client = gspread.authorize(self.credentials)
+                # Test the connection
+                self.gspread_client.list_spreadsheet_files()
+            except Exception as service_error:
+                print(f"Service initialization failed: {str(service_error)}")
+                self.service = None
+                self.gspread_client = None
+                raise Exception("Failed to initialize Google services") from service_error
+                
         except Exception as e:
-            print(f"Warning: Authentication failed: {str(e)}")
+            print(f"Authentication failed: {str(e)}")
             self.service = None
+            self.gspread_client = None
+            raise Exception(f"Authentication failed: {str(e)}")
 
     def read_sheet(self, spreadsheet_id=None, range_name=None, local_file=None):
         """Read data from either Google Sheet or local Excel file."""
@@ -148,3 +173,22 @@ class SheetsConnector:
             
         except HttpError as e:
             raise Exception(f"Error creating sheet: {str(e)}")
+
+    def gspread_read(self, spreadsheet_id):
+        """Read data from Google Sheets using gspread."""
+        try:
+            if not self.gspread_client:
+                raise Exception("Gspread client not initialized")
+
+            sheet = self.gspread_client.open_by_key(spreadsheet_id)
+            worksheet = sheet.worksheet("all2")
+            data = worksheet.get_all_values()
+
+            print("Fetched rows:", len(data))
+            print("First row:", data[0] if data else "No data")
+
+            return data
+            
+        except Exception as e:
+            print(f"Warning: Error reading sheet: {str(e)}")
+            return None
