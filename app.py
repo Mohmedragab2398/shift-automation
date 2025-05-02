@@ -627,14 +627,26 @@ def main():
                         try:
                             # Convert DataFrame to a format that Streamlit can safely display
                             display_df = employee_df.copy()
-                            # Ensure all columns are strings and handle any null values
+                            
+                            # Ensure all columns are properly formatted
                             for col in display_df.columns:
-                                display_df[col] = display_df[col].fillna('').astype(str)
+                                if pd.api.types.is_datetime64_any_dtype(display_df[col]):
+                                    display_df[col] = display_df[col].dt.strftime('%Y-%m-%d %H:%M:%S')
+                                elif pd.api.types.is_numeric_dtype(display_df[col]):
+                                    display_df[col] = display_df[col].fillna('').astype(str)
+                                else:
+                                    display_df[col] = display_df[col].fillna('').astype(str).str.strip()
+                            
+                            # Convert to string type for all columns
+                            display_df = display_df.astype(str)
+                            
                             st.success(f"Displaying {len(display_df)} employee records.")
                             st.dataframe(display_df, use_container_width=True)
                         except Exception as e:
                             st.error(f"Error displaying employee data: {str(e)}")
-                            st.write("Raw data preview:", display_df.head().to_dict())
+                            # Display a simplified version of the data
+                            st.write("Data preview (simplified):")
+                            st.write(display_df.head().to_dict())
                     else:
                         st.error("No data was returned from Google Sheets. Please check:")
                         st.markdown("""
@@ -650,14 +662,26 @@ def main():
                 try:
                     # Convert DataFrame to a format that Streamlit can safely display
                     display_df = employee_df.copy()
-                    # Ensure all columns are strings and handle any null values
+                    
+                    # Ensure all columns are properly formatted
                     for col in display_df.columns:
-                        display_df[col] = display_df[col].fillna('').astype(str)
+                        if pd.api.types.is_datetime64_any_dtype(display_df[col]):
+                            display_df[col] = display_df[col].dt.strftime('%Y-%m-%d %H:%M:%S')
+                        elif pd.api.types.is_numeric_dtype(display_df[col]):
+                            display_df[col] = display_df[col].fillna('').astype(str)
+                        else:
+                            display_df[col] = display_df[col].fillna('').astype(str).str.strip()
+                    
+                    # Convert to string type for all columns
+                    display_df = display_df.astype(str)
+                    
                     st.success(f"Displaying {len(display_df)} employee records.")
                     st.dataframe(display_df, use_container_width=True)
                 except Exception as e:
                     st.error(f"Error displaying employee data: {str(e)}")
-                    st.write("Raw data preview:", display_df.head().to_dict())
+                    # Display a simplified version of the data
+                    st.write("Data preview (simplified):")
+                    st.write(display_df.head().to_dict())
 
     # City file upload remains the same and is always visible
     with col2:

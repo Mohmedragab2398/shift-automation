@@ -70,12 +70,20 @@ class DataSanitizer:
                 logger.error(f"Missing required columns in employee file: {missing_cols}")
                 return None, missing_cols
             
-            # Clean and normalize data - ensure all columns are strings
+            # Clean and normalize data
             df = df.dropna(subset=['employee_id'])
             
-            # Convert all columns to string type
+            # Convert all columns to string type and handle special cases
             for col in df.columns:
-                df[col] = df[col].fillna('').astype(str).str.strip()
+                if pd.api.types.is_datetime64_any_dtype(df[col]):
+                    # Convert datetime to string format
+                    df[col] = df[col].dt.strftime('%Y-%m-%d %H:%M:%S')
+                elif pd.api.types.is_numeric_dtype(df[col]):
+                    # Convert numeric to string, handling NaN
+                    df[col] = df[col].fillna('').astype(str)
+                else:
+                    # Convert other types to string
+                    df[col] = df[col].fillna('').astype(str).str.strip()
             
             # Remove duplicates
             df = df.drop_duplicates(subset=['employee_id'], keep='first')
