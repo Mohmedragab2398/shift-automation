@@ -14,7 +14,7 @@ class SheetsConnector:
             'https://www.googleapis.com/auth/drive',
             'https://spreadsheets.google.com/feeds'
         ]
-            self._authenticate()
+        self._authenticate()
 
     def _authenticate(self):
         """Authenticate with Google Sheets API using service account from Streamlit secrets."""
@@ -34,7 +34,7 @@ class SheetsConnector:
             
             # Initialize services
             try:
-            self.service = build('sheets', 'v4', credentials=self.credentials)
+                self.service = build('sheets', 'v4', credentials=self.credentials)
                 self.gspread_client = gspread.authorize(self.credentials)
                 # Test the connection
                 self.gspread_client.list_spreadsheet_files()
