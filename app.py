@@ -505,77 +505,66 @@ def display_contract_report(data, employee_data):
         print(f"Error in contract report display: {str(e)}")
 
 def display_city_report(data, employee_data):
-    """Display city-wise report with enhanced validation and styling."""
-    st.header("City Report")
+    """Display city-wise report with proper indentation"""
     try:
-        # Input validation
-        if data is None or employee_data is None or data.empty or employee_data.empty:
+        if data is None or data.empty:
             st.warning("No data available for city report")
             return
 
-        # Generate city report
-        report = DataSanitizer.generate_city_report(data, employee_data)
-        if report.empty:
-            st.warning("No data available for city report")
+        # Process data for city report
+        city_data = DataSanitizer.generate_city_report(data, employee_data)
+        
+        if city_data.empty:
+            st.warning("No data available for city report after processing")
             return
-
-        # Get unique dates and cities
-        dates = sorted(data['planned_start_date'].unique())
-        cities = sorted(report['City'].unique())
-
-        # Create tabs for each city
-        tabs = st.tabs(cities)
-        for i, city in enumerate(cities):
-            with tabs[i]:
-                city_data = report[report['City'] == city].copy()
-                
-                # Create a table for each date
+        
+        # Get unique dates for the report
+        dates = sorted(city_data['Date'].unique())
+        
+        # Display data for each date
+        for date in dates:
+            date_data = city_data[city_data['Date'] == date].copy()
+            if not date_data.empty:
+                st.markdown(f"### {date}")
+                styled_report = style_dataframe(
+                    date_data[['Contract', 'Total', 'Assigned', 'Unassigned', 'Assigned_Percentage']],
+                    ['Assigned_Percentage'],
+                    add_grand_total=True
+                )
+                st.dataframe(styled_report, use_container_width=True)
+        
+        # Create side-by-side summary table
+        if not city_data.empty:
+            st.markdown("### Summary View (All Dates)")
+            summary_data = []
+            contracts = sorted(city_data['Contract'].unique())
+            
+            for contract in contracts:
+                row = {'Contract': contract}
                 for date in dates:
                     date_str = pd.to_datetime(date).strftime('%d-%m')
-                    date_data = city_data[city_data['Date'] == date].copy()
+                    date_contract_data = city_data[
+                        (city_data['Date'] == date) & 
+                        (city_data['Contract'] == contract)
+                    ]
                     
-                    if not date_data.empty:
-                        st.markdown(f"#### {date_str}")
-                        date_data = date_data.sort_values('Contract')
-                        styled_report = style_dataframe(
-                            date_data[['Contract', 'Total', 'Assigned', 'Unassigned', 'Assigned_Percentage']],
-                            ['Assigned_Percentage'],
-                            add_grand_total=True
-                        )
-                        st.dataframe(styled_report, use_container_width=True)
+                    if not date_contract_data.empty:
+                        row[f'{date_str}_Assigned'] = date_contract_data['Assigned'].iloc[0]
+                        row[f'{date_str}_Unassigned'] = date_contract_data['Unassigned'].iloc[0]
+                        row[f'{date_str}_Percentage'] = date_contract_data['Assigned_Percentage'].iloc[0]
+                    else:
+                        row[f'{date_str}_Assigned'] = 0
+                        row[f'{date_str}_Unassigned'] = 0
+                        row[f'{date_str}_Percentage'] = 0.0
                 
-                # Create side-by-side summary table
-                if not city_data.empty:
-                st.markdown("### Summary View (All Dates)")
-                summary_data = []
-                contracts = sorted(city_data['Contract'].unique())
-                    
-                for contract in contracts:
-                    row = {'Contract': contract}
-                    for date in dates:
-                        date_str = pd.to_datetime(date).strftime('%d-%m')
-                        date_contract_data = city_data[
-                            (city_data['Date'] == date) & 
-                            (city_data['Contract'] == contract)
-                        ]
-                            
-                        if not date_contract_data.empty:
-                            row[f'{date_str}_Assigned'] = date_contract_data['Assigned'].iloc[0]
-                            row[f'{date_str}_Unassigned'] = date_contract_data['Unassigned'].iloc[0]
-                            row[f'{date_str}_Percentage'] = date_contract_data['Assigned_Percentage'].iloc[0]
-                        else:
-                            row[f'{date_str}_Assigned'] = 0
-                            row[f'{date_str}_Unassigned'] = 0
-                            row[f'{date_str}_Percentage'] = 0.0
-                        
-                    summary_data.append(row)
-                    
-                if summary_data:
-                    summary_df = pd.DataFrame(summary_data)
-                    percentage_cols = [col for col in summary_df.columns if col.endswith('_Percentage')]
-                    styled_summary = style_dataframe(summary_df, percentage_cols, add_grand_total=True)
-                    st.dataframe(styled_summary, use_container_width=True)
-                
+                summary_data.append(row)
+            
+            if summary_data:
+                summary_df = pd.DataFrame(summary_data)
+                percentage_cols = [col for col in summary_df.columns if col.endswith('_Percentage')]
+                styled_summary = style_dataframe(summary_df, percentage_cols, add_grand_total=True)
+                st.dataframe(styled_summary, use_container_width=True)
+    
     except Exception as e:
         st.error(f"Error in city report display: {str(e)}")
         print(f"Error in city report display: {str(e)}")
