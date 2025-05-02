@@ -546,35 +546,35 @@ def display_city_report(data, employee_data):
                 
                 # Create side-by-side summary table
                 if not city_data.empty:
-                    st.markdown("### Summary View (All Dates)")
-                    summary_data = []
-                    contracts = sorted(city_data['Contract'].unique())
+                st.markdown("### Summary View (All Dates)")
+                summary_data = []
+                contracts = sorted(city_data['Contract'].unique())
                     
-                    for contract in contracts:
-                        row = {'Contract': contract}
-                        for date in dates:
-                            date_str = pd.to_datetime(date).strftime('%d-%m')
-                            date_contract_data = city_data[
-                                (city_data['Date'] == date) & 
-                                (city_data['Contract'] == contract)
-                            ]
+                for contract in contracts:
+                    row = {'Contract': contract}
+                    for date in dates:
+                        date_str = pd.to_datetime(date).strftime('%d-%m')
+                        date_contract_data = city_data[
+                            (city_data['Date'] == date) & 
+                            (city_data['Contract'] == contract)
+                        ]
                             
-                            if not date_contract_data.empty:
-                                row[f'{date_str}_Assigned'] = date_contract_data['Assigned'].iloc[0]
-                                row[f'{date_str}_Unassigned'] = date_contract_data['Unassigned'].iloc[0]
-                                row[f'{date_str}_Percentage'] = date_contract_data['Assigned_Percentage'].iloc[0]
-                            else:
-                                row[f'{date_str}_Assigned'] = 0
-                                row[f'{date_str}_Unassigned'] = 0
-                                row[f'{date_str}_Percentage'] = 0.0
+                        if not date_contract_data.empty:
+                            row[f'{date_str}_Assigned'] = date_contract_data['Assigned'].iloc[0]
+                            row[f'{date_str}_Unassigned'] = date_contract_data['Unassigned'].iloc[0]
+                            row[f'{date_str}_Percentage'] = date_contract_data['Assigned_Percentage'].iloc[0]
+                        else:
+                            row[f'{date_str}_Assigned'] = 0
+                            row[f'{date_str}_Unassigned'] = 0
+                            row[f'{date_str}_Percentage'] = 0.0
                         
-                        summary_data.append(row)
+                    summary_data.append(row)
                     
-                    if summary_data:
-                        summary_df = pd.DataFrame(summary_data)
-                        percentage_cols = [col for col in summary_df.columns if col.endswith('_Percentage')]
-                        styled_summary = style_dataframe(summary_df, percentage_cols, add_grand_total=True)
-                        st.dataframe(styled_summary, use_container_width=True)
+                if summary_data:
+                    summary_df = pd.DataFrame(summary_data)
+                    percentage_cols = [col for col in summary_df.columns if col.endswith('_Percentage')]
+                    styled_summary = style_dataframe(summary_df, percentage_cols, add_grand_total=True)
+                    st.dataframe(styled_summary, use_container_width=True)
                 
     except Exception as e:
         st.error(f"Error in city report display: {str(e)}")
@@ -624,6 +624,17 @@ def main():
                         st.session_state['employee_df'] = employee_df
                         st.session_state['employee_refresh'] = False
                         st.success(f"Successfully loaded {len(employee_df)} employee records from Google Sheets.")
+                        try:
+                            # Convert DataFrame to a format that Streamlit can safely display
+                            display_df = employee_df.copy()
+                            # Ensure all columns are strings and handle any null values
+                            for col in display_df.columns:
+                                display_df[col] = display_df[col].fillna('').astype(str)
+                            st.success(f"Displaying {len(display_df)} employee records.")
+                            st.dataframe(display_df, use_container_width=True)
+                        except Exception as e:
+                            st.error(f"Error displaying employee data: {str(e)}")
+                            st.write("Raw data preview:", display_df.head().to_dict())
                     else:
                         st.error("No data was returned from Google Sheets. Please check:")
                         st.markdown("""
@@ -636,10 +647,17 @@ def main():
         else:
             employee_df = st.session_state.get('employee_df', None)
             if employee_df is not None and not employee_df.empty:
-                st.success(f"Displaying {len(employee_df)} employee records.")
-
-        if employee_df is not None and not employee_df.empty:
-            st.dataframe(employee_df, use_container_width=True)
+                try:
+                    # Convert DataFrame to a format that Streamlit can safely display
+                    display_df = employee_df.copy()
+                    # Ensure all columns are strings and handle any null values
+                    for col in display_df.columns:
+                        display_df[col] = display_df[col].fillna('').astype(str)
+                    st.success(f"Displaying {len(display_df)} employee records.")
+                    st.dataframe(display_df, use_container_width=True)
+                except Exception as e:
+                    st.error(f"Error displaying employee data: {str(e)}")
+                    st.write("Raw data preview:", display_df.head().to_dict())
 
     # City file upload remains the same and is always visible
     with col2:

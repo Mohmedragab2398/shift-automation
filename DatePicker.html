@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        padding: 20px;
+      }
+      .container {
+        max-width: 100%;
+      }
+      .date-picker {
+        margin-bottom: 20px;
+      }
+      .date-input {
+        width: 100%;
+        padding: 8px;
+        margin: 5px 0;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+      }
+      .button {
+        background-color: #4CAF50;
+        color: white;
+        padding: 10px 20px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        width: 100%;
+      }
+      .button:hover {
+        background-color: #45a049;
+      }
+      .error {
+        color: red;
+        margin-top: 10px;
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h2>Select Dates</h2>
+      <div class="date-picker">
+        <input type="date" class="date-input" id="date1" required>
+        <input type="date" class="date-input" id="date2">
+        <input type="date" class="date-input" id="date3">
+      </div>
+      <button class="button" onclick="processDates()">Process Selected Dates</button>
+      <div id="error" class="error"></div>
+    </div>
+
+    <script>
+      function processDates() {
+        const date1 = document.getElementById('date1').value;
+        const date2 = document.getElementById('date2').value;
+        const date3 = document.getElementById('date3').value;
+        const errorDiv = document.getElementById('error');
+
+        if (!date1) {
+          errorDiv.textContent = 'Please select at least one date';
+          errorDiv.style.display = 'block';
+          return;
+        }
+
+        const dates = [new Date(date1)];
+        if (date2) dates.push(new Date(date2));
+        if (date3) dates.push(new Date(date3));
+
+        google.script.run
+          .withSuccessHandler(() => {
+            google.script.host.close();
+          })
+          .withFailureHandler((error) => {
+            errorDiv.textContent = 'Error: ' + error.message;
+            errorDiv.style.display = 'block';
+          })
+          .processDates(dates);
+      }
+    </script>
+  </body>
+</html> 

@@ -70,15 +70,24 @@ class DataSanitizer:
                 logger.error(f"Missing required columns in employee file: {missing_cols}")
                 return None, missing_cols
             
-            # Clean and normalize data
+            # Clean and normalize data - ensure all columns are strings
             df = df.dropna(subset=['employee_id'])
-            df['employee_id'] = df['employee_id'].astype(str).str.strip()
-            df['employee_name'] = df['employee_name'].astype(str).str.strip()
-            df['contract_name'] = df['contract_name'].astype(str).str.strip()
-            df['city'] = df['city'].astype(str).str.strip()
+            
+            # Convert all columns to string type
+            for col in df.columns:
+                df[col] = df[col].fillna('').astype(str).str.strip()
             
             # Remove duplicates
             df = df.drop_duplicates(subset=['employee_id'], keep='first')
+            
+            # Ensure consistent data types for all columns
+            df = df.astype({
+                'employee_id': str,
+                'employee_name': str,
+                'contract_name': str,
+                'city': str
+            })
+            
             logger.info(f"Successfully processed employee file. Total employees: {len(df)}")
             return df, []
             
