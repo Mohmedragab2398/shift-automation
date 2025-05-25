@@ -6,211 +6,270 @@ from datetime import datetime, timedelta
 from data_sanitizer import DataSanitizer, validate_data
 from check_inactive import InactiveRidersChecker
 from evaluated import EvaluatedProcessor
-from sheets_connector import SheetsConnector
-import logging
-
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 st.set_page_config(page_title="Shift Management Dashboard", layout="wide")
 
-def apply_custom_table_styling():
-    """Apply custom CSS styling for tables with blue headers and no borders."""
-    st.markdown("""
-    <style>
-        /* Remove all table borders and apply professional styling */
-        .stDataFrame > div {
-            border: none !important;
-        }
-
-        .stDataFrame table {
-            border-collapse: separate !important;
-            border-spacing: 0 !important;
-            border: none !important;
-            border-radius: 10px !important;
-            overflow: hidden !important;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1) !important;
-        }
-
-        .stDataFrame thead tr th {
-            background: linear-gradient(135deg, #007BFF, #0056b3) !important;
-            color: white !important;
-            font-weight: bold !important;
-            text-align: center !important;
-            padding: 8px 6px !important;  /* Reduced padding */
-            border: none !important;
-            font-size: 12px !important;  /* Smaller font */
-        }
-
-        .stDataFrame tbody tr td {
-            text-align: center !important;
-            padding: 10px 8px !important;
-            border: none !important;
-            border-radius: 8px !important;
-        }
-
-        .stDataFrame tbody tr:nth-child(even) {
-            background-color: #b8d4f0 !important;
-        }
-
-        .stDataFrame tbody tr:nth-child(odd) {
-            background-color: white !important;
-        }
-
-        .stDataFrame tbody tr:hover {
-            background-color: #e3f2fd !important;
-            transform: scale(1.02) !important;
-            transition: all 0.2s ease !important;
-        }
-
-        /* Header styling for contract/city identification */
-        .header-style {
-            background: linear-gradient(135deg, #4a90a4, #2c5f6f);
-            color: white;
-            padding: 15px 20px;
-            margin: 20px 0 10px 0;
-            border-radius: 8px;
-            font-size: 18px;
-            font-weight: bold;
-            text-align: center;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-            font-family: Arial, sans-serif;
-        }
-    </style>
-    """, unsafe_allow_html=True)
-
-# Custom CSS for logo styling
+# Basic CSS for styling
 st.markdown("""
 <style>
-    .logo-container {
-        display: flex;
-        flex-direction: row;
-        align-items: baseline;
-        justify-content: center;
-        margin-bottom: 30px;
-        gap: 20px;
-    }
-    .logo-text {
-        color: #FF5A00;
+    .table-header {
+        background: linear-gradient(135deg, #4a90a4, #2c5f6f);
+        color: white;
+        padding: 15px 20px;
+        margin: 20px 0 10px 0;
+        border-radius: 8px;
+        font-size: 18px;
+        font-weight: bold;
+        text-align: center;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
         font-family: Arial, sans-serif;
-        font-weight: 900;
-        font-size: 72px;
-        line-height: 1;
-        letter-spacing: -1px;
-    }
-    .team-text {
-        color: #FF5A00;
-        font-family: Arial, sans-serif;
-        font-weight: 900;
-        font-size: 48px;
-        display: inline-block;
-    }
-    @keyframes wobble {
-        0% { transform: rotate(0deg); }
-        25% { transform: rotate(-1deg); }
-        75% { transform: rotate(1deg); }
-        100% { transform: rotate(0deg); }
-    }
-    .wobble {
-        animation: wobble 2s ease-in-out infinite;
-        display: inline-block;
     }
 </style>
 """, unsafe_allow_html=True)
 
-# Display the Talabat ESM Team logo at the top
-col1, col2, col3 = st.columns([1, 2, 1])
-with col2:
-    st.markdown("""
-    <div class="logo-container">
-        <div class="logo-text wobble">talabat</div>
-        <div class="logo-text wobble" style="position: relative;">
-            ESM
-            <span class="team-text wobble" style="position: absolute; bottom: -15px; right: -60px; font-size: 32px;">Team</span>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-
-def style_dataframe(df, percentage_cols=None, add_grand_total=False):
-    """Apply professional styling to dataframes with blue headers and no borders."""
-    if df.empty:
-        return df
-
-    # Create a copy to avoid modifying the original
-    styled_df = df.copy()
-
-    # Apply table styling with blue headers and no borders
-    styler = styled_df.style
-
-    # Apply table styling with blue headers and no borders
-    styler = styler.set_table_styles([
-        {'selector': 'th', 'props': [
-            ('background-color', '#007BFF'),
-            ('color', 'white'),
-            ('font-weight', 'bold'),
-            ('text-align', 'center'),
-            ('padding', '8px 6px'),  # Reduced padding
-            ('border', 'none'),
-            ('font-size', '12px')  # Smaller font
-        ]},
-        {'selector': 'td', 'props': [
-            ('text-align', 'center'),
-            ('padding', '10px 8px'),
-            ('border', 'none'),
-            ('border-radius', '8px')
-        ]},
-        {'selector': 'table', 'props': [
-            ('border-collapse', 'separate'),
-            ('border-spacing', '0'),
-            ('border', 'none'),
-            ('border-radius', '10px'),
-            ('overflow', 'hidden'),
-            ('box-shadow', '0 4px 12px rgba(0,0,0,0.1)')
-        ]},
-        {'selector': 'tr:nth-child(even)', 'props': [
-            ('background-color', '#b8d4f0')
-        ]},
-        {'selector': 'tr:nth-child(odd)', 'props': [
-            ('background-color', 'white')
-        ]},
-        {'selector': 'tr:hover', 'props': [
-            ('background-color', '#e3f2fd'),
-            ('transform', 'scale(1.02)'),
-            ('transition', 'all 0.2s ease')
-        ]}
-    ])
-
-    # Center align all content
-    def center_align(val):
-        return 'text-align: center'
-
-    styler = styler.map(center_align)
-
-    return styler
+st.title("📊 Shift Management Dashboard")
 
 def create_table_header(title, subtitle=None):
     """Create a professional table header"""
     if subtitle:
         header_html = f"""
-        <div class="header-style">
+        <div class="table-header">
             <strong>{title}: {subtitle}</strong>
         </div>
         """
     else:
         header_html = f"""
-        <div class="header-style">
+        <div class="table-header">
             <strong>{title}</strong>
         </div>
         """
     st.markdown(header_html, unsafe_allow_html=True)
 
-def display_overview(employee_df, shift_df, contract_report_df, city_report_df):
-    """Display overview with metrics and charts."""
-    # Apply styling again to ensure it's active for this display
-    apply_custom_table_styling()
+def create_donut_chart(assigned, unassigned, title):
+    """Create a donut chart for assignment visualization"""
+    total = assigned + unassigned
+    if total == 0:
+        return None
 
-    st.header("Overview")
+    # Create donut chart
+    fig = go.Figure(data=[go.Pie(
+        labels=['Assigned', 'Unassigned'],
+        values=[assigned, unassigned],
+        hole=0.6,
+        marker_colors=['#28a745', '#dc3545']
+    )])
+
+    # Add title and center text
+    fig.update_layout(
+        title=title,
+        annotations=[dict(text=f'{assigned}<br>Assigned', x=0.5, y=0.5, font_size=16, showarrow=False)],
+        showlegend=True,
+        height=300,
+        margin=dict(t=50, b=0, l=0, r=0)
+    )
+
+    return fig
+
+
+
+
+
+def display_contract_report(shift_df, employee_df):
+    """Display contract-wise report with donut charts"""
+    st.header("Contract Report")
+
+    try:
+        if shift_df.empty or employee_df.empty:
+            st.warning("No data available for contract report")
+            return
+
+        # Get unique dates and contracts
+        dates = sorted(shift_df['planned_start_date'].unique())
+
+        # Process data for each contract
+        contract_data = []
+        for date in dates:
+            date_data = shift_df[shift_df['planned_start_date'] == date]
+
+            # Group by contract
+            for contract in employee_df['contract_name'].unique():
+                contract_employees = employee_df[employee_df['contract_name'] == contract]
+                contract_shifts = date_data[date_data['employee_id'].isin(contract_employees['employee_id'])]
+
+                total_employees = len(contract_employees)
+                assigned = len(contract_shifts['employee_id'].unique())
+                unassigned = total_employees - assigned
+                percentage = (assigned / total_employees * 100) if total_employees > 0 else 0
+
+                contract_data.append({
+                    'Date': date,
+                    'Contract': contract,
+                    'Total': total_employees,
+                    'Assigned': assigned,
+                    'Unassigned': unassigned,
+                    'Assigned_Percentage': percentage
+                })
+
+        if not contract_data:
+            st.warning("No contract data to display")
+            return
+
+        data_df = pd.DataFrame(contract_data)
+
+        # Display per-date tables for each contract
+        for contract in data_df['Contract'].unique():
+            contract_data_filtered = data_df[data_df['Contract'] == contract]
+
+            if not contract_data_filtered.empty:
+                for date in dates:
+                    date_str = pd.to_datetime(date).strftime('%d-%m')
+                    mini_report = contract_data_filtered[contract_data_filtered['Date'] == date]
+
+                    if not mini_report.empty:
+                        # Add professional table header for contract identification
+                        create_table_header("Contract", contract)
+                        st.markdown(f"**Date: {date_str}**")
+
+                        # Group by city for this contract and date
+                        city_data = []
+                        for city in employee_df['city'].unique():
+                            city_employees = employee_df[
+                                (employee_df['contract_name'] == contract) &
+                                (employee_df['city'] == city)
+                            ]
+                            if len(city_employees) > 0:
+                                date_data = shift_df[shift_df['planned_start_date'] == date]
+                                city_shifts = date_data[date_data['employee_id'].isin(city_employees['employee_id'])]
+
+                                total = len(city_employees)
+                                assigned = len(city_shifts['employee_id'].unique())
+                                unassigned = total - assigned
+                                percentage = (assigned / total * 100) if total > 0 else 0
+
+                                city_data.append({
+                                    'City': city,
+                                    'Total': total,
+                                    'Assigned': assigned,
+                                    'Unassigned': unassigned,
+                                    'Assigned_Percentage': percentage
+                                })
+
+                        if city_data:
+                            city_df = pd.DataFrame(city_data)
+                            city_df = city_df[city_df['Total'] > 0]  # Only show cities with employees
+
+                            if not city_df.empty:
+                                # Create two columns: table and donut chart
+                                col1, col2 = st.columns([2, 1])
+
+                                with col1:
+                                    # Display table with basic styling
+                                    st.dataframe(city_df, use_container_width=True, hide_index=True)
+
+                                with col2:
+                                    # Create donut chart for this contract
+                                    total_assigned = city_df['Assigned'].sum()
+                                    total_unassigned = city_df['Unassigned'].sum()
+
+                                    donut_fig = create_donut_chart(
+                                        total_assigned,
+                                        total_unassigned,
+                                        f"{contract}<br>{date_str}"
+                                    )
+
+                                    if donut_fig:
+                                        st.plotly_chart(donut_fig, use_container_width=True)
+
+    except Exception as e:
+        st.error(f"Error in contract report display: {str(e)}")
+        print(f"Error in contract report display: {str(e)}")
+
+def main():
+    """Main application function"""
+
+    # Sidebar for workflow selection
+    st.sidebar.title("Shift Management Dashboard")
+
+    workflow = st.sidebar.selectbox(
+        "Select Workflow",
+        ["Shifts Update", "Check Inactive Riders", "Evaluated"]
+    )
+
+    if workflow == "Shifts Update":
+        # --- Shifts Update workflow ---
+
+        # File upload section
+        st.sidebar.header("📁 Upload Files")
+
+        employee_file = st.sidebar.file_uploader(
+            "Upload Employee File",
+            type=['csv', 'xlsx'],
+            help="Upload the employee data file containing employee information"
+        )
+
+        shift_file = st.sidebar.file_uploader(
+            "Upload Shift File",
+            type=['csv', 'xlsx'],
+            help="Upload the shift data file containing shift assignments"
+        )
+
+        if employee_file and shift_file:
+            try:
+                # Load and process data
+                sanitizer = DataSanitizer()
+
+                # Process employee data
+                employee_df = sanitizer.load_and_sanitize_employee_data(employee_file)
+                if not validate_data(employee_df, 'employee_file'):
+                    return
+
+                # Process shift data
+                shift_df = sanitizer.load_and_sanitize_shift_data(shift_file)
+                if not validate_data(shift_df, 'shift_file'):
+                    return
+
+                # Create tabs for different views
+                tab1, tab2 = st.tabs(["📋 Contract Report", "🏙️ City Report"])
+
+                with tab1:
+                    display_contract_report(shift_df, employee_df)
+
+                with tab2:
+                    st.header("City Report")
+                    st.info("City report functionality will be implemented here")
+
+            except Exception as e:
+                st.error(f"Error processing files: {str(e)}")
+                print(f"Error processing files: {str(e)}")
+        else:
+            st.info("Please upload both employee and shift files to begin analysis.")
+
+    elif workflow == "Check Inactive Riders":
+        # --- Check Inactive Riders workflow ---
+        try:
+            checker = InactiveRidersChecker()
+            checker.run()
+        except Exception as e:
+            st.error(f"Error in Check Inactive Riders workflow: {str(e)}")
+            import traceback
+            print(f"Error details: {traceback.format_exc()}")
+
+    elif workflow == "Evaluated":
+        # --- Evaluated workflow ---
+        try:
+            processor = EvaluatedProcessor()
+            processor.run()
+        except Exception as e:
+            st.error(f"Error in Evaluated workflow: {str(e)}")
+            import traceback
+            print(f"Error details: {traceback.format_exc()}")
+
+if __name__ == "__main__":
+    main()
+
+
+
+# End of file
 
     # Only consider valid shift statuses for assignment
     valid_statuses = ["EVALUATED", "PUBLISHED"]
@@ -359,6 +418,282 @@ def display_unassigned_employees(employees_df: pd.DataFrame, shifts_df: pd.DataF
         import traceback
         logger.error(traceback.format_exc())
 
+def display_contract_report(data, employee_data):
+    """Display contract-wise report with enhanced validation and styling."""
+    # Apply styling again to ensure it's active for this display
+    apply_custom_table_styling()
+
+    st.header("Contract Report")
+    try:
+        if data is None or employee_data is None or data.empty or employee_data.empty:
+            st.warning("No data available for contract report")
+            return
+
+        # Get unique dates and contracts
+        dates = sorted(data['planned_start_date'].unique())
+        contracts = sorted(employee_data['contract_name'].unique())
+
+        # Create tabs for each contract
+        tabs = st.tabs(contracts)
+        for i, contract in enumerate(contracts):
+            with tabs[i]:
+                # Get contract employees
+                contract_employees = employee_data[employee_data['contract_name'] == contract]
+                total = len(contract_employees)
+
+                # Calculate overall metrics for the selected date range
+                contract_shifts = data[data['employee_id'].isin(contract_employees['employee_id'])]
+                if not contract_shifts.empty:
+                    # Remove duplicates to count each employee only once
+                    assigned = len(contract_shifts.drop_duplicates('employee_id')['employee_id'])
+                else:
+                    assigned = 0
+
+                unassigned = total - assigned
+                assignment_rate = (assigned / total * 100) if total > 0 else 0
+
+                # Display overall metrics
+                col1, col2, col3, col4 = st.columns(4)
+                with col1:
+                    st.metric("Total Employees", int(total))
+                with col2:
+                    st.metric("Total Assigned", int(assigned))
+                with col3:
+                    st.metric("Total Unassigned", int(unassigned))
+                with col4:
+                    st.metric("Overall Assignment Rate", f"{assignment_rate:.1f}%")
+
+                # Per-day tables
+                for date in dates:
+                    date_str = pd.to_datetime(date).strftime('%d-%m')
+                    date_data = data[data['planned_start_date'] == date]
+                    if date_data.empty:
+                        continue
+
+                    # Generate report for this date
+                    mini_report = DataSanitizer.generate_contract_report(date_data, contract_employees)
+                    if mini_report.empty:
+                        continue
+
+                    mini_report = mini_report[mini_report['Contract'] == contract]
+                    if mini_report.empty:
+                        continue
+
+                    mini_report = mini_report.sort_values('City')
+
+                    # Add professional table header for contract identification
+                    create_table_header("Contract", contract)
+                    st.markdown(f"**Date: {date_str}**")
+
+                    # Use pandas styling with updated configuration
+                    display_df = mini_report[['City', 'Total', 'Assigned', 'Unassigned', 'Assigned_Percentage']].copy()
+
+                    # Apply styling using pandas styler
+                    styler = display_df.style
+
+                    # Format percentage column (no color coding)
+                    styler = styler.format({'Assigned_Percentage': '{:.1f}%'})
+
+                    # Apply table styling with blue headers, COMPLETELY no borders, rounded cells
+                    styler = styler.set_table_styles([
+                        {'selector': 'th', 'props': [
+                            ('background-color', '#007BFF'),  # Blue header
+                            ('color', 'white'),
+                            ('font-weight', 'bold'),
+                            ('text-align', 'center'),
+                            ('vertical-align', 'middle'),
+                            ('padding', '12px'),
+                            ('border', 'none !important'),  # No borders
+                            ('border-top', 'none !important'),
+                            ('border-bottom', 'none !important'),
+                            ('border-left', 'none !important'),
+                            ('border-right', 'none !important'),
+                            ('outline', 'none !important'),
+                            ('border-radius', '15px'),  # Rounded headers
+                            ('margin', '2px')
+                        ]},
+                        {'selector': 'td', 'props': [
+                            ('text-align', 'center'),
+                            ('vertical-align', 'middle'),
+                            ('padding', '10px'),
+                            ('border', 'none !important'),  # No borders
+                            ('border-top', 'none !important'),
+                            ('border-bottom', 'none !important'),
+                            ('border-left', 'none !important'),
+                            ('border-right', 'none !important'),
+                            ('outline', 'none !important'),
+                            ('border-radius', '15px'),  # Oval/rounded cells
+                            ('margin', '2px')
+                        ]},
+                        {'selector': 'tr:nth-child(even)', 'props': [
+                            ('background-color', '#b8d4f0'),
+                            ('border', 'none !important'),
+                            ('outline', 'none !important')
+                        ]},
+                        {'selector': 'tr:nth-child(odd)', 'props': [
+                            ('background-color', '#ffffff'),
+                            ('border', 'none !important'),
+                            ('outline', 'none !important')
+                        ]},
+                        {'selector': 'table', 'props': [
+                            ('border', 'none !important'),  # No table border
+                            ('border-collapse', 'separate'),
+                            ('border-spacing', '4px'),
+                            ('outline', 'none !important'),
+                            ('border-top', 'none !important'),
+                            ('border-bottom', 'none !important'),
+                            ('border-left', 'none !important'),
+                            ('border-right', 'none !important')
+                        ]},
+                        {'selector': 'thead', 'props': [
+                            ('border', 'none !important'),
+                            ('outline', 'none !important')
+                        ]},
+                        {'selector': 'tbody', 'props': [
+                            ('border', 'none !important'),
+                            ('outline', 'none !important')
+                        ]},
+                        {'selector': 'tr', 'props': [
+                            ('border', 'none !important'),
+                            ('outline', 'none !important')
+                        ]},
+                        {'selector': '*', 'props': [
+                            ('border', 'none !important'),
+                            ('outline', 'none !important')
+                        ]}
+                    ])
+
+                    st.dataframe(styler, use_container_width=True, hide_index=True)
+
+                # Summary table (side-by-side, like City Report)
+                st.markdown("### Summary View (All Dates)")
+                summary_data = []
+                cities = sorted(contract_employees['city'].unique())
+
+                for city in cities:
+                    row = {'City': city}
+
+                    # Get the actual total number of employees for this city (not sum of assignments)
+                    city_employees = contract_employees[contract_employees['city'] == city]
+                    actual_total_employees = len(city_employees)
+
+                    for date in dates:
+                        date_str = pd.to_datetime(date).strftime('%d-%m')
+                        date_data = data[data['planned_start_date'] == date]
+                        if date_data.empty:
+                            row[f'{date_str}_Assigned'] = 0
+                            row[f'{date_str}_Unassigned'] = 0
+                            row[f'{date_str}_Percentage'] = 0.0
+                            continue
+
+                        date_data = date_data[date_data['employee_id'].isin(city_employees['employee_id'])]
+
+                        total_employees = len(city_employees)
+                        assigned = len(date_data.drop_duplicates('employee_id'))
+                        unassigned = total_employees - assigned
+                        percentage = (assigned / total_employees * 100) if total_employees > 0 else 0.0
+
+                        row[f'{date_str}_Assigned'] = assigned
+                        row[f'{date_str}_Unassigned'] = unassigned
+                        row[f'{date_str}_Percentage'] = percentage
+
+                    # Add Total column showing actual employee count (same as per-date tables)
+                    row['Total'] = actual_total_employees
+                    summary_data.append(row)
+
+                if summary_data:
+                    summary_df = pd.DataFrame(summary_data)
+
+                    # Reorder columns to put Total after City
+                    cols = list(summary_df.columns)
+                    if 'Total' in cols:
+                        cols.remove('Total')
+                        cols.insert(1, 'Total')  # Insert Total as second column
+                        summary_df = summary_df[cols]
+
+                    percentage_cols = [col for col in summary_df.columns if col.endswith('_Percentage')]
+
+                    # Apply styling using pandas styler
+                    styler = summary_df.style
+
+                    # Format percentage columns (no color coding)
+                    format_dict = {col: '{:.1f}%' for col in percentage_cols}
+                    styler = styler.format(format_dict)
+
+                    # Apply table styling with blue headers, COMPLETELY no borders, rounded cells
+                    styler = styler.set_table_styles([
+                        {'selector': 'th', 'props': [
+                            ('background-color', '#007BFF'),  # Blue header
+                            ('color', 'white'),
+                            ('font-weight', 'bold'),
+                            ('text-align', 'center'),
+                            ('vertical-align', 'middle'),
+                            ('padding', '12px'),
+                            ('border', 'none !important'),  # No borders
+                            ('border-top', 'none !important'),
+                            ('border-bottom', 'none !important'),
+                            ('border-left', 'none !important'),
+                            ('border-right', 'none !important'),
+                            ('outline', 'none !important'),
+                            ('border-radius', '15px'),  # Rounded headers
+                            ('margin', '2px')
+                        ]},
+                        {'selector': 'td', 'props': [
+                            ('text-align', 'center'),
+                            ('vertical-align', 'middle'),
+                            ('padding', '10px'),
+                            ('border', 'none !important'),  # No borders
+                            ('border-top', 'none !important'),
+                            ('border-bottom', 'none !important'),
+                            ('border-left', 'none !important'),
+                            ('border-right', 'none !important'),
+                            ('outline', 'none !important'),
+                            ('border-radius', '15px'),  # Oval/rounded cells
+                            ('margin', '2px')
+                        ]},
+                        {'selector': 'tr:nth-child(even)', 'props': [
+                            ('background-color', '#b8d4f0'),
+                            ('border', 'none !important'),
+                            ('outline', 'none !important')
+                        ]},
+                        {'selector': 'tr:nth-child(odd)', 'props': [
+                            ('background-color', '#ffffff'),
+                            ('border', 'none !important'),
+                            ('outline', 'none !important')
+                        ]},
+                        {'selector': 'table', 'props': [
+                            ('border', 'none !important'),  # No table border
+                            ('border-collapse', 'separate'),
+                            ('border-spacing', '4px'),
+                            ('outline', 'none !important'),
+                            ('border-top', 'none !important'),
+                            ('border-bottom', 'none !important'),
+                            ('border-left', 'none !important'),
+                            ('border-right', 'none !important')
+                        ]},
+                        {'selector': 'thead', 'props': [
+                            ('border', 'none !important'),
+                            ('outline', 'none !important')
+                        ]},
+                        {'selector': 'tbody', 'props': [
+                            ('border', 'none !important'),
+                            ('outline', 'none !important')
+                        ]},
+                        {'selector': 'tr', 'props': [
+                            ('border', 'none !important'),
+                            ('outline', 'none !important')
+                        ]},
+                        {'selector': '*', 'props': [
+                            ('border', 'none !important'),
+                            ('outline', 'none !important')
+                        ]}
+                    ])
+
+                    st.dataframe(styler, use_container_width=True, hide_index=True)
+    except Exception as e:
+        st.error(f"Error in contract report display: {str(e)}")
+        print(f"Error in contract report display: {str(e)}")
+
 def display_city_report(data, employee_data):
     """Display city-wise report with each city in its own tab, with tables and summary."""
     # Apply styling again to ensure it's active for this display
@@ -405,34 +740,9 @@ def display_city_report(data, employee_data):
                     if city_report.empty:
                         continue
 
-                    # Add dark blue square headers
-                    st.markdown(f"""
-                    <div style="
-                        background-color: #1e3a8a;
-                        color: white;
-                        padding: 8px 12px;
-                        margin: 10px 0 5px 0;
-                        border-radius: 4px;
-                        font-weight: bold;
-                        font-size: 14px;
-                        display: inline-block;
-                        border: 2px solid #1e40af;
-                    ">City: {city}</div>
-                    """, unsafe_allow_html=True)
-
-                    st.markdown(f"""
-                    <div style="
-                        background-color: #1e3a8a;
-                        color: white;
-                        padding: 8px 12px;
-                        margin: 5px 0 10px 0;
-                        border-radius: 4px;
-                        font-weight: bold;
-                        font-size: 14px;
-                        display: inline-block;
-                        border: 2px solid #1e40af;
-                    ">Date: {date_str}</div>
-                    """, unsafe_allow_html=True)
+                    # Add professional table header for city identification
+                    create_table_header("City", city)
+                    st.markdown(f"**Date: {date_str}**")
 
                     # Use pandas styling with updated configuration
                     display_df = city_report[['Contract', 'Total', 'Assigned', 'Unassigned', 'Assigned_Percentage']].copy()
@@ -440,10 +750,10 @@ def display_city_report(data, employee_data):
                     # Apply styling using pandas styler
                     styler = display_df.style
 
-                    # Format percentage column properly
-                    styler = styler.format({'Assigned_Percentage': '{:.2f}%'})
+                    # Format percentage column (no color coding)
+                    styler = styler.format({'Assigned_Percentage': '{:.1f}%'})
 
-                    # Apply table styling with bigger tables
+                    # Apply table styling with blue headers, COMPLETELY no borders, rounded cells
                     styler = styler.set_table_styles([
                         {'selector': 'th', 'props': [
                             ('background-color', '#007BFF'),  # Blue header
@@ -451,62 +761,66 @@ def display_city_report(data, employee_data):
                             ('font-weight', 'bold'),
                             ('text-align', 'center'),
                             ('vertical-align', 'middle'),
-                            ('padding', '12px 10px'),  # Increased padding
+                            ('padding', '12px'),
                             ('border', 'none !important'),  # No borders
                             ('border-top', 'none !important'),
                             ('border-bottom', 'none !important'),
                             ('border-left', 'none !important'),
                             ('border-right', 'none !important'),
                             ('outline', 'none !important'),
-                            ('border-radius', '10px'),
-                            ('margin', '1px'),
-                            ('font-size', '16px')  # Bigger font
+                            ('border-radius', '15px'),  # Rounded headers
+                            ('margin', '2px')
                         ]},
                         {'selector': 'td', 'props': [
                             ('text-align', 'center'),
                             ('vertical-align', 'middle'),
-                            ('padding', '14px 12px'),  # Increased padding
+                            ('padding', '10px'),
                             ('border', 'none !important'),  # No borders
                             ('border-top', 'none !important'),
                             ('border-bottom', 'none !important'),
                             ('border-left', 'none !important'),
                             ('border-right', 'none !important'),
                             ('outline', 'none !important'),
-                            ('border-radius', '10px'),  # Rounded cells
-                            ('margin', '1px'),
-                            ('font-size', '14px')  # Bigger font
+                            ('border-radius', '15px'),  # Oval/rounded cells
+                            ('margin', '2px')
+                        ]},
+                        {'selector': 'tr:nth-child(even)', 'props': [
+                            ('background-color', '#b8d4f0'),
+                            ('border', 'none !important'),
+                            ('outline', 'none !important')
+                        ]},
+                        {'selector': 'tr:nth-child(odd)', 'props': [
+                            ('background-color', '#ffffff'),
+                            ('border', 'none !important'),
+                            ('outline', 'none !important')
                         ]},
                         {'selector': 'table', 'props': [
+                            ('border', 'none !important'),  # No table border
                             ('border-collapse', 'separate'),
-                            ('border-spacing', '3px'),
+                            ('border-spacing', '4px'),
+                            ('outline', 'none !important'),
+                            ('border-top', 'none !important'),
+                            ('border-bottom', 'none !important'),
+                            ('border-left', 'none !important'),
+                            ('border-right', 'none !important')
+                        ]},
+                        {'selector': 'thead', 'props': [
                             ('border', 'none !important'),
-                            ('border-radius', '15px'),
-                            ('overflow', 'hidden'),
-                            ('box-shadow', '0 4px 12px rgba(0,0,0,0.1)'),
-                            ('width', '100%'),  # Make table wider
-                            ('min-width', '600px')  # Minimum width
+                            ('outline', 'none !important')
                         ]},
-                        {'selector': 'tr:nth-child(even) td', 'props': [
-                            ('background-color', '#b8d4f0'),  # Alternating row colors
-                            ('border-radius', '10px')
+                        {'selector': 'tbody', 'props': [
+                            ('border', 'none !important'),
+                            ('outline', 'none !important')
                         ]},
-                        {'selector': 'tr:nth-child(odd) td', 'props': [
-                            ('background-color', 'white'),
-                            ('border-radius', '10px')
+                        {'selector': 'tr', 'props': [
+                            ('border', 'none !important'),
+                            ('outline', 'none !important')
                         ]},
-                        {'selector': 'tr:hover td', 'props': [
-                            ('background-color', '#e3f2fd'),
-                            ('transform', 'scale(1.02)'),
-                            ('transition', 'all 0.2s ease'),
-                            ('border-radius', '10px')
+                        {'selector': '*', 'props': [
+                            ('border', 'none !important'),
+                            ('outline', 'none !important')
                         ]}
                     ])
-
-                    # Center align all content
-                    def center_align(val):
-                        return 'text-align: center'
-
-                    styler = styler.map(center_align)
 
                     st.dataframe(styler, use_container_width=True, hide_index=True)
 
@@ -515,7 +829,7 @@ def display_city_report(data, employee_data):
                         # Create a donut chart showing contract distribution for this city and date
                         fig = px.pie(
                             city_report,
-                            values='Assigned',  # Use 'Assigned' values instead of 'Total'
+                            values='Assigned',  # Changed from 'Total' to 'Assigned'
                             names='Contract',
                             title=f'Contract Distribution in {city} on {date_str}',
                             hole=0.4,  # This creates the donut effect
@@ -534,498 +848,177 @@ def display_city_report(data, employee_data):
                         )
                         # Display the chart
                         st.plotly_chart(fig, use_container_width=True)
-
-                # Add Summary Table for All Dates (side by side)
                 st.markdown("### Summary View (All Dates)")
-
-                # Add dark blue headers for City and Date range
-                st.markdown(f"""
-                <div style="
-                    background-color: #1e3a8a;
-                    color: white;
-                    padding: 8px 12px;
-                    margin: 10px 0 5px 0;
-                    border-radius: 4px;
-                    font-weight: bold;
-                    font-size: 14px;
-                    display: inline-block;
-                    border: 2px solid #1e40af;
-                ">City: {city}</div>
-                """, unsafe_allow_html=True)
-
-                # Create date range string
-                date_range_str = f"{pd.to_datetime(dates[0]).strftime('%d-%m')} to {pd.to_datetime(dates[-1]).strftime('%d-%m')}" if len(dates) > 1 else pd.to_datetime(dates[0]).strftime('%d-%m')
-                st.markdown(f"""
-                <div style="
-                    background-color: #1e3a8a;
-                    color: white;
-                    padding: 8px 12px;
-                    margin: 5px 0 10px 0;
-                    border-radius: 4px;
-                    font-weight: bold;
-                    font-size: 14px;
-                    display: inline-block;
-                    border: 2px solid #1e40af;
-                ">Date: {date_range_str}</div>
-                """, unsafe_allow_html=True)
                 summary_data = []
-                contracts = sorted(employee_data[employee_data['city'] == city]['contract_name'].unique())
-
+                contracts = sorted(city_report['Contract'].unique()) if not city_report.empty else []
                 for contract in contracts:
                     row = {'Contract': contract}
 
-                    # Get contract employees for this city
-                    contract_city_employees = employee_data[
-                        (employee_data['contract_name'] == contract) &
-                        (employee_data['city'] == city)
-                    ]
+                    # Get the actual total number of employees for this contract in this city (not sum of assignments)
+                    actual_total_employees = 0
 
-                    if len(contract_city_employees) > 0:
-                        total_employees = len(contract_city_employees)
-                        row['Total'] = total_employees
+                    for date in dates:
+                        date_str = pd.to_datetime(date).strftime('%d-%m')
+                        date_contract_data = city_data[
+                            (city_data['Date'] == date) &
+                            (city_data['City'] == city) &
+                            (city_data['Contract'] == contract)
+                        ]
+                        if not date_contract_data.empty:
+                            assigned = date_contract_data['Assigned'].iloc[0]
+                            unassigned = date_contract_data['Unassigned'].iloc[0]
+                            total_for_this_date = assigned + unassigned  # This is the actual employee count
 
-                        # Add data for each date side by side
-                        for date in dates:
-                            date_str = pd.to_datetime(date).strftime('%d-%m')
-                            date_data = data[data['planned_start_date'] == date]
+                            row[f'{date_str}_Assigned'] = assigned
+                            row[f'{date_str}_Unassigned'] = unassigned
+                            row[f'{date_str}_Percentage'] = date_contract_data['Assigned_Percentage'].iloc[0]
 
-                            # Calculate assigned for this specific date
-                            contract_city_date_shifts = date_data[
-                                data['employee_id'].isin(contract_city_employees['employee_id'])
-                            ]
-                            assigned_for_date = len(contract_city_date_shifts['employee_id'].unique())
-                            unassigned_for_date = total_employees - assigned_for_date
-                            percentage_for_date = (assigned_for_date / total_employees * 100) if total_employees > 0 else 0
+                            # Use the total from any date (should be consistent across dates)
+                            if actual_total_employees == 0:
+                                actual_total_employees = total_for_this_date
+                        else:
+                            row[f'{date_str}_Assigned'] = 0
+                            row[f'{date_str}_Unassigned'] = 0
+                            row[f'{date_str}_Percentage'] = 0.0
 
-                            row[f'{date_str}_Assigned'] = assigned_for_date
-                            row[f'{date_str}_Unassigned'] = unassigned_for_date
-                            row[f'{date_str}_Percentage'] = percentage_for_date
-
-                        summary_data.append(row)
-
+                    # Add Total column showing actual employee count (same as per-date tables)
+                    row['Total'] = actual_total_employees
+                    summary_data.append(row)
                 if summary_data:
                     summary_df = pd.DataFrame(summary_data)
 
-                    # Apply styling to summary table
-                    summary_styler = summary_df.style
+                    # Reorder columns to put Total after Contract
+                    cols = list(summary_df.columns)
+                    if 'Total' in cols:
+                        cols.remove('Total')
+                        cols.insert(1, 'Total')  # Insert Total as second column
+                        summary_df = summary_df[cols]
 
-                    # Format percentage columns
                     percentage_cols = [col for col in summary_df.columns if col.endswith('_Percentage')]
-                    format_dict = {col: '{:.1f}%' for col in percentage_cols}
-                    summary_styler = summary_styler.format(format_dict)
 
-                    # Apply bigger table styling
-                    summary_styler = summary_styler.set_table_styles([
+                    # Apply styling using pandas styler
+                    styler = summary_df.style
+
+                    # Format percentage columns (no color coding)
+                    format_dict = {col: '{:.1f}%' for col in percentage_cols}
+                    styler = styler.format(format_dict)
+
+                    # Apply table styling with blue headers, COMPLETELY no borders, rounded cells
+                    styler = styler.set_table_styles([
                         {'selector': 'th', 'props': [
-                            ('background-color', '#007BFF'),
+                            ('background-color', '#007BFF'),  # Blue header
                             ('color', 'white'),
                             ('font-weight', 'bold'),
                             ('text-align', 'center'),
                             ('vertical-align', 'middle'),
-                            ('padding', '12px 8px'),  # Bigger padding
-                            ('border', 'none !important'),
-                            ('border-radius', '10px'),
-                            ('margin', '1px'),
-                            ('font-size', '14px')  # Bigger font
+                            ('padding', '12px'),
+                            ('border', 'none !important'),  # No borders
+                            ('border-top', 'none !important'),
+                            ('border-bottom', 'none !important'),
+                            ('border-left', 'none !important'),
+                            ('border-right', 'none !important'),
+                            ('outline', 'none !important'),
+                            ('border-radius', '15px'),  # Rounded headers
+                            ('margin', '2px')
                         ]},
                         {'selector': 'td', 'props': [
                             ('text-align', 'center'),
                             ('vertical-align', 'middle'),
-                            ('padding', '12px 8px'),  # Bigger padding
+                            ('padding', '10px'),
+                            ('border', 'none !important'),  # No borders
+                            ('border-top', 'none !important'),
+                            ('border-bottom', 'none !important'),
+                            ('border-left', 'none !important'),
+                            ('border-right', 'none !important'),
+                            ('outline', 'none !important'),
+                            ('border-radius', '15px'),  # Oval/rounded cells
+                            ('margin', '2px')
+                        ]},
+                        {'selector': 'tr:nth-child(even)', 'props': [
+                            ('background-color', '#b8d4f0'),
                             ('border', 'none !important'),
-                            ('border-radius', '8px'),
-                            ('margin', '1px'),
-                            ('font-size', '13px')  # Bigger font
+                            ('outline', 'none !important')
+                        ]},
+                        {'selector': 'tr:nth-child(odd)', 'props': [
+                            ('background-color', '#ffffff'),
+                            ('border', 'none !important'),
+                            ('outline', 'none !important')
                         ]},
                         {'selector': 'table', 'props': [
+                            ('border', 'none !important'),  # No table border
                             ('border-collapse', 'separate'),
-                            ('border-spacing', '2px'),
+                            ('border-spacing', '4px'),
+                            ('outline', 'none !important'),
+                            ('border-top', 'none !important'),
+                            ('border-bottom', 'none !important'),
+                            ('border-left', 'none !important'),
+                            ('border-right', 'none !important')
+                        ]},
+                        {'selector': 'thead', 'props': [
                             ('border', 'none !important'),
-                            ('border-radius', '10px'),
-                            ('overflow', 'hidden'),
-                            ('box-shadow', '0 2px 8px rgba(0,0,0,0.1)'),
-                            ('width', '100%'),  # Make table wider
-                            ('min-width', '800px')  # Minimum width for side-by-side data
+                            ('outline', 'none !important')
                         ]},
-                        {'selector': 'tr:nth-child(even) td', 'props': [
-                            ('background-color', '#b8d4f0'),
-                            ('border-radius', '8px')
+                        {'selector': 'tbody', 'props': [
+                            ('border', 'none !important'),
+                            ('outline', 'none !important')
                         ]},
-                        {'selector': 'tr:nth-child(odd) td', 'props': [
-                            ('background-color', 'white'),
-                            ('border-radius', '8px')
+                        {'selector': 'tr', 'props': [
+                            ('border', 'none !important'),
+                            ('outline', 'none !important')
                         ]},
-                        {'selector': 'tr:hover td', 'props': [
-                            ('background-color', '#e3f2fd'),
-                            ('transform', 'scale(1.01)'),
-                            ('transition', 'all 0.2s ease'),
-                            ('border-radius', '8px')
+                        {'selector': '*', 'props': [
+                            ('border', 'none !important'),
+                            ('outline', 'none !important')
                         ]}
                     ])
 
-                    # Center align all content
-                    def center_align_city_summary(val):
-                        return 'text-align: center'
-                    summary_styler = summary_styler.map(center_align_city_summary)
+                    st.dataframe(styler, use_container_width=True, hide_index=True)
 
-                    st.dataframe(summary_styler, use_container_width=True, hide_index=True)
+                    # Add a summary donut chart for contract distribution in this city
+                    # Create a summary dataframe for the chart
+                    chart_data = []
+                    for contract in contracts:
+                        # Extract assigned values from the summary dataframe
+                        contract_row = summary_df[summary_df['Contract'] == contract]
+                        if not contract_row.empty:
+                            # Calculate the average assigned value across all dates
+                            assigned_cols = [col for col in contract_row.columns if col.endswith('_Assigned')]
+                            if assigned_cols:
+                                assigned_values = [contract_row[col].iloc[0] for col in assigned_cols]
+                                avg_assigned = sum(assigned_values) / len(assigned_values)
 
+                                chart_data.append({
+                                    'Contract': contract,
+                                    'Assigned': avg_assigned
+                                })
+
+                    if chart_data:
+                        chart_df = pd.DataFrame(chart_data)
+                        # Create a donut chart showing overall contract distribution for this city
+                        fig = px.pie(
+                            chart_df,
+                            values='Assigned',  # Changed from 'Total' to 'Assigned'
+                            names='Contract',
+                            title=f'Overall Contract Distribution in {city}',
+                            hole=0.4,  # This creates the donut effect
+                            color_discrete_sequence=px.colors.qualitative.Pastel  # Use a different color palette for summary
+                        )
+                        # Update layout for better appearance
+                        fig.update_layout(
+                            legend=dict(
+                                orientation="h",
+                                yanchor="bottom",
+                                y=-0.3,
+                                xanchor="center",
+                                x=0.5
+                            ),
+                            margin=dict(t=60, b=60, l=20, r=20)
+                        )
+                        # Display the chart
+                        st.plotly_chart(fig, use_container_width=True)
     except Exception as e:
         st.error(f"Error in city report display: {str(e)}")
         print(f"Error in city report display: {str(e)}")
-
-def create_donut_chart(assigned, unassigned, title):
-    """Create a donut chart for assignment visualization"""
-    total = assigned + unassigned
-    if total == 0:
-        return None
-
-    # Create donut chart
-    fig = go.Figure(data=[go.Pie(
-        labels=['Assigned', 'Unassigned'],
-        values=[assigned, unassigned],
-        hole=0.6,
-        marker_colors=['#28a745', '#dc3545']
-    )])
-
-    # Add title and center text
-    fig.update_layout(
-        title=title,
-        annotations=[dict(text=f'{assigned}<br>Assigned', x=0.5, y=0.5, font_size=16, showarrow=False)],
-        showlegend=True,
-        height=300,
-        margin=dict(t=50, b=0, l=0, r=0)
-    )
-
-    return fig
-
-def display_contract_report(shift_df, employee_df):
-    """Display contract-wise report with each contract in its own tab, similar to city report"""
-    st.header("Contract Report")
-
-    try:
-        if shift_df.empty or employee_df.empty:
-            st.warning("No data available for contract report")
-            return
-
-        # Get unique dates and contracts
-        dates = sorted(shift_df['planned_start_date'].unique())
-        contracts = sorted(employee_df['contract_name'].unique())
-
-        # Create tabs for each contract
-        tabs = st.tabs(contracts)
-
-        for i, contract in enumerate(contracts):
-            with tabs[i]:
-                # Get contract employees
-                contract_employees = employee_df[employee_df['contract_name'] == contract]
-                total = len(contract_employees)
-
-                # Calculate overall metrics for the selected date range
-                contract_shifts = shift_df[shift_df['employee_id'].isin(contract_employees['employee_id'])]
-                if not contract_shifts.empty:
-                    # Remove duplicates to count each employee only once
-                    assigned = len(contract_shifts.drop_duplicates('employee_id')['employee_id'])
-                else:
-                    assigned = 0
-
-                unassigned = total - assigned
-                assignment_rate = (assigned / total * 100) if total > 0 else 0
-
-                # Display overall metrics
-                col1, col2, col3, col4 = st.columns(4)
-                with col1:
-                    st.metric("Total Employees", int(total))
-                with col2:
-                    st.metric("Total Assigned", int(assigned))
-                with col3:
-                    st.metric("Total Unassigned", int(unassigned))
-                with col4:
-                    st.metric("Overall Assignment Rate", f"{assignment_rate:.1f}%")
-
-                # Per-day tables
-                for date in dates:
-                    date_str = pd.to_datetime(date).strftime('%d-%m')
-                    date_data = shift_df[shift_df['planned_start_date'] == date]
-                    if date_data.empty:
-                        continue
-
-                    # Add dark blue square headers
-                    st.markdown(f"""
-                    <div style="
-                        background-color: #1e3a8a;
-                        color: white;
-                        padding: 8px 12px;
-                        margin: 10px 0 5px 0;
-                        border-radius: 4px;
-                        font-weight: bold;
-                        font-size: 14px;
-                        display: inline-block;
-                        border: 2px solid #1e40af;
-                    ">Contract: {contract}</div>
-                    """, unsafe_allow_html=True)
-
-                    st.markdown(f"""
-                    <div style="
-                        background-color: #1e3a8a;
-                        color: white;
-                        padding: 8px 12px;
-                        margin: 5px 0 10px 0;
-                        border-radius: 4px;
-                        font-weight: bold;
-                        font-size: 14px;
-                        display: inline-block;
-                        border: 2px solid #1e40af;
-                    ">Date: {date_str}</div>
-                    """, unsafe_allow_html=True)
-
-                    # Group by city for this contract and date
-                    city_data = []
-                    for city in employee_df['city'].unique():
-                        city_employees = employee_df[
-                            (employee_df['contract_name'] == contract) &
-                            (employee_df['city'] == city)
-                        ]
-                        if len(city_employees) > 0:
-                            city_shifts = date_data[date_data['employee_id'].isin(city_employees['employee_id'])]
-
-                            total_city = len(city_employees)
-                            assigned_city = len(city_shifts['employee_id'].unique())
-                            unassigned_city = total_city - assigned_city
-                            percentage = (assigned_city / total_city * 100) if total_city > 0 else 0
-
-                            city_data.append({
-                                'City': city,
-                                'Total': total_city,
-                                'Assigned': assigned_city,
-                                'Unassigned': unassigned_city,
-                                'Assigned_Percentage': percentage
-                            })
-
-                    if city_data:
-                        city_df = pd.DataFrame(city_data)
-                        city_df = city_df[city_df['Total'] > 0]  # Only show cities with employees
-
-                        if not city_df.empty:
-                            # Apply styling using pandas styler
-                            styler = city_df.style
-
-                            # Format percentage column properly
-                            styler = styler.format({'Assigned_Percentage': '{:.2f}%'})
-
-                            # Apply table styling with bigger tables
-                            styler = styler.set_table_styles([
-                                {'selector': 'th', 'props': [
-                                    ('background-color', '#007BFF'),
-                                    ('color', 'white'),
-                                    ('font-weight', 'bold'),
-                                    ('text-align', 'center'),
-                                    ('vertical-align', 'middle'),
-                                    ('padding', '12px 10px'),  # Increased padding
-                                    ('border', 'none !important'),
-                                    ('border-radius', '10px'),
-                                    ('margin', '1px'),
-                                    ('font-size', '16px')  # Bigger font
-                                ]},
-                                {'selector': 'td', 'props': [
-                                    ('text-align', 'center'),
-                                    ('vertical-align', 'middle'),
-                                    ('padding', '14px 12px'),  # Increased padding
-                                    ('border', 'none !important'),
-                                    ('border-radius', '10px'),
-                                    ('margin', '1px'),
-                                    ('font-size', '14px')  # Bigger font
-                                ]},
-                                {'selector': 'table', 'props': [
-                                    ('border-collapse', 'separate'),
-                                    ('border-spacing', '3px'),
-                                    ('border', 'none !important'),
-                                    ('border-radius', '15px'),
-                                    ('overflow', 'hidden'),
-                                    ('box-shadow', '0 4px 12px rgba(0,0,0,0.1)'),
-                                    ('width', '100%'),  # Make table wider
-                                    ('min-width', '600px')  # Minimum width
-                                ]},
-                                {'selector': 'tr:nth-child(even) td', 'props': [
-                                    ('background-color', '#b8d4f0'),
-                                    ('border-radius', '10px')
-                                ]},
-                                {'selector': 'tr:nth-child(odd) td', 'props': [
-                                    ('background-color', 'white'),
-                                    ('border-radius', '10px')
-                                ]},
-                                {'selector': 'tr:hover td', 'props': [
-                                    ('background-color', '#e3f2fd'),
-                                    ('transform', 'scale(1.02)'),
-                                    ('transition', 'all 0.2s ease'),
-                                    ('border-radius', '10px')
-                                ]}
-                            ])
-
-                            # Center align all content
-                            def center_align(val):
-                                return 'text-align: center'
-
-                            styler = styler.map(center_align)
-
-                            # Create two columns: table and donut chart
-                            col1, col2 = st.columns([2, 1])
-
-                            with col1:
-                                st.dataframe(styler, use_container_width=True, hide_index=True)
-
-                            with col2:
-                                # Create donut chart for this contract
-                                total_assigned = city_df['Assigned'].sum()
-                                total_unassigned = city_df['Unassigned'].sum()
-
-                                donut_fig = create_donut_chart(
-                                    total_assigned,
-                                    total_unassigned,
-                                    f"{contract}<br>{date_str}"
-                                )
-
-                                if donut_fig:
-                                    st.plotly_chart(donut_fig, use_container_width=True)
-
-                # Add Summary Table for All Dates (side by side)
-                st.markdown("### Summary View (All Dates)")
-
-                # Add dark blue headers for Contract and Date range
-                st.markdown(f"""
-                <div style="
-                    background-color: #1e3a8a;
-                    color: white;
-                    padding: 8px 12px;
-                    margin: 10px 0 5px 0;
-                    border-radius: 4px;
-                    font-weight: bold;
-                    font-size: 14px;
-                    display: inline-block;
-                    border: 2px solid #1e40af;
-                ">Contract: {contract}</div>
-                """, unsafe_allow_html=True)
-
-                # Create date range string
-                date_range_str = f"{pd.to_datetime(dates[0]).strftime('%d-%m')} to {pd.to_datetime(dates[-1]).strftime('%d-%m')}" if len(dates) > 1 else pd.to_datetime(dates[0]).strftime('%d-%m')
-                st.markdown(f"""
-                <div style="
-                    background-color: #1e3a8a;
-                    color: white;
-                    padding: 8px 12px;
-                    margin: 5px 0 10px 0;
-                    border-radius: 4px;
-                    font-weight: bold;
-                    font-size: 14px;
-                    display: inline-block;
-                    border: 2px solid #1e40af;
-                ">Date: {date_range_str}</div>
-                """, unsafe_allow_html=True)
-                summary_data = []
-                cities = sorted(employee_df['city'].unique())
-
-                for city in cities:
-                    row = {'City': city}
-
-                    # Get contract employees for this city
-                    contract_city_employees = employee_df[
-                        (employee_df['contract_name'] == contract) &
-                        (employee_df['city'] == city)
-                    ]
-
-                    if len(contract_city_employees) > 0:
-                        total_employees = len(contract_city_employees)
-                        row['Total'] = total_employees
-
-                        # Add data for each date side by side
-                        for date in dates:
-                            date_str = pd.to_datetime(date).strftime('%d-%m')
-                            date_data = shift_df[shift_df['planned_start_date'] == date]
-
-                            # Calculate assigned for this specific date
-                            contract_city_date_shifts = date_data[
-                                date_data['employee_id'].isin(contract_city_employees['employee_id'])
-                            ]
-                            assigned_for_date = len(contract_city_date_shifts['employee_id'].unique())
-                            unassigned_for_date = total_employees - assigned_for_date
-                            percentage_for_date = (assigned_for_date / total_employees * 100) if total_employees > 0 else 0
-
-                            row[f'{date_str}_Assigned'] = assigned_for_date
-                            row[f'{date_str}_Unassigned'] = unassigned_for_date
-                            row[f'{date_str}_Percentage'] = percentage_for_date
-
-                        summary_data.append(row)
-
-                if summary_data:
-                    summary_df = pd.DataFrame(summary_data)
-
-                    # Apply styling to summary table
-                    summary_styler = summary_df.style
-
-                    # Format percentage columns
-                    percentage_cols = [col for col in summary_df.columns if col.endswith('_Percentage')]
-                    format_dict = {col: '{:.1f}%' for col in percentage_cols}
-                    summary_styler = summary_styler.format(format_dict)
-
-                    # Apply bigger table styling
-                    summary_styler = summary_styler.set_table_styles([
-                        {'selector': 'th', 'props': [
-                            ('background-color', '#007BFF'),
-                            ('color', 'white'),
-                            ('font-weight', 'bold'),
-                            ('text-align', 'center'),
-                            ('vertical-align', 'middle'),
-                            ('padding', '12px 8px'),  # Bigger padding
-                            ('border', 'none !important'),
-                            ('border-radius', '10px'),
-                            ('margin', '1px'),
-                            ('font-size', '14px')  # Bigger font
-                        ]},
-                        {'selector': 'td', 'props': [
-                            ('text-align', 'center'),
-                            ('vertical-align', 'middle'),
-                            ('padding', '12px 8px'),  # Bigger padding
-                            ('border', 'none !important'),
-                            ('border-radius', '8px'),
-                            ('margin', '1px'),
-                            ('font-size', '13px')  # Bigger font
-                        ]},
-                        {'selector': 'table', 'props': [
-                            ('border-collapse', 'separate'),
-                            ('border-spacing', '2px'),
-                            ('border', 'none !important'),
-                            ('border-radius', '10px'),
-                            ('overflow', 'hidden'),
-                            ('box-shadow', '0 2px 8px rgba(0,0,0,0.1)'),
-                            ('width', '100%'),  # Make table wider
-                            ('min-width', '800px')  # Minimum width for side-by-side data
-                        ]},
-                        {'selector': 'tr:nth-child(even) td', 'props': [
-                            ('background-color', '#b8d4f0'),
-                            ('border-radius', '8px')
-                        ]},
-                        {'selector': 'tr:nth-child(odd) td', 'props': [
-                            ('background-color', 'white'),
-                            ('border-radius', '8px')
-                        ]},
-                        {'selector': 'tr:hover td', 'props': [
-                            ('background-color', '#e3f2fd'),
-                            ('transform', 'scale(1.01)'),
-                            ('transition', 'all 0.2s ease'),
-                            ('border-radius', '8px')
-                        ]}
-                    ])
-
-                    # Center align all content
-                    def center_align_summary(val):
-                        return 'text-align: center'
-                    summary_styler = summary_styler.map(center_align_summary)
-
-                    st.dataframe(summary_styler, use_container_width=True, hide_index=True)
-
-    except Exception as e:
-        st.error(f"Error in contract report display: {str(e)}")
-        print(f"Error in contract report display: {str(e)}")
 
 def main():
     # Apply custom table styling for enhanced visual appearance
@@ -1136,11 +1129,9 @@ def main():
                 accept_multiple_files=True,
                 key="city_files"
             )
-
         if not city_files:
             st.warning("⚠️ Please upload at least one city file")
             return
-
         try:
             with st.spinner("Processing city files..."):
                 merged_shifts = DataSanitizer.merge_shift_files(city_files)
@@ -1150,7 +1141,6 @@ def main():
                 merged_shifts.columns = merged_shifts.columns.str.strip().str.lower().str.replace(' ', '_')
                 validate_data(merged_shifts, 'shift_file')
                 st.success(f"✅ Successfully processed {len(city_files)} city files")
-
             min_date = merged_shifts['planned_start_date'].min()
             max_date = merged_shifts['planned_start_date'].max()
             st.markdown("### Select Date Range")
@@ -1169,13 +1159,11 @@ def main():
             if len(selected_dates) != 2:
                 st.warning("Please select both start and end dates")
                 return
-
             date_range = pd.date_range(selected_dates[0], selected_dates[1])
             filtered_shifts = DataSanitizer.filter_by_dates(merged_shifts, date_range)
             if filtered_shifts is None:
                 st.error("No data found for selected dates")
                 return
-
             tab1, tab2, tab3, tab4, tab5 = st.tabs([
                 "Overview",
                 "Daily Shifts",
@@ -1183,7 +1171,6 @@ def main():
                 "Contract Report",
                 "City Report"
             ])
-
             with tab1:
                 filtered_shifts_df = pd.concat(filtered_shifts.values()) if filtered_shifts else pd.DataFrame()
                 display_overview(
@@ -1192,23 +1179,18 @@ def main():
                     DataSanitizer.generate_contract_report(filtered_shifts_df, employee_df),
                     DataSanitizer.generate_city_report(filtered_shifts_df, employee_df)
                 )
-
             with tab2:
                 for date in date_range:
                     date_shifts = filtered_shifts.get(date.date(), pd.DataFrame())
                     display_daily_shifts(date_shifts, date.date())
-
             with tab3:
                 for date in date_range:
                     date_shifts = filtered_shifts.get(date.date(), pd.DataFrame())
                     display_unassigned_employees(employee_df, date_shifts, date.date())
-
             with tab4:
                 display_contract_report(filtered_shifts_df, employee_df)
-
             with tab5:
                 display_city_report(filtered_shifts_df, employee_df)
-
         except Exception as e:
             st.error(f"An error occurred: {str(e)}")
 
@@ -1454,15 +1436,6 @@ def main():
                                                                 date,
                                                                 show_messages=False,
                                                                 source=f"all_{date.strftime('%Y%m%d')}"
-                                                            )
-
-                                                            # Add debug export button
-                                                            st.markdown("#### 🔍 Debug Information")
-                                                            st.markdown("Download detailed data to analyze discrepancies:")
-                                                            evaluated_processor.export_debug_data(
-                                                                date_df,
-                                                                date,
-                                                                source=f"debug_all_{date.strftime('%Y%m%d')}"
                                                             )
 
                                                     # Status-specific tabs

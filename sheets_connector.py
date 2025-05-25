@@ -192,3 +192,26 @@ class SheetsConnector:
         except Exception as e:
             print(f"Warning: Error reading sheet: {str(e)}")
             return None
+
+    def get_all_sheet_data(self):
+        """Get data from the all2 sheet (used by both workflows)."""
+        try:
+            if not self.gspread_client:
+                raise Exception("Gspread client not initialized")
+
+            sheet = self.gspread_client.open_by_key(st.secrets["spreadsheet_id"])
+            worksheet = sheet.worksheet("all2")
+            data = worksheet.get_all_values()
+
+            if not data:
+                return None
+
+            # Convert to DataFrame
+            df = pd.DataFrame(data[1:], columns=data[0])
+            return df
+            
+        except Exception as e:
+            print(f"Warning: Error reading all2 sheet: {str(e)}")
+            return None
+
+
