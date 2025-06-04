@@ -17,7 +17,10 @@ st.set_page_config(page_title="Shift Management Dashboard", layout="wide")
 
 def apply_custom_table_styling():
     """Apply custom CSS styling for tables with blue headers and no borders."""
-    st.markdown("""
+    # Only apply CSS once per session to prevent accumulation
+    if 'css_applied' not in st.session_state:
+        st.session_state.css_applied = True
+        st.markdown("""
     <style>
         /* Remove all table borders and apply professional styling */
         .stDataFrame > div {
@@ -60,8 +63,6 @@ def apply_custom_table_styling():
 
         .stDataFrame tbody tr:hover {
             background-color: #e3f2fd !important;
-            transform: scale(1.02) !important;
-            transition: all 0.2s ease !important;
         }
 
         /* Header styling for contract/city identification */
@@ -106,16 +107,7 @@ st.markdown("""
         font-size: 48px;
         display: inline-block;
     }
-    @keyframes wobble {
-        0% { transform: rotate(0deg); }
-        25% { transform: rotate(-1deg); }
-        75% { transform: rotate(1deg); }
-        100% { transform: rotate(0deg); }
-    }
-    .wobble {
-        animation: wobble 2s ease-in-out infinite;
-        display: inline-block;
-    }
+    /* Removed wobble animation for better performance */
 </style>
 """, unsafe_allow_html=True)
 
@@ -124,68 +116,65 @@ col1, col2, col3 = st.columns([1, 2, 1])
 with col2:
     st.markdown("""
     <div class="logo-container">
-        <div class="logo-text wobble">talabat</div>
-        <div class="logo-text wobble" style="position: relative;">
+        <div class="logo-text">talabat</div>
+        <div class="logo-text" style="position: relative;">
             ESM
-            <span class="team-text wobble" style="position: absolute; bottom: -15px; right: -60px; font-size: 32px;">Team</span>
+            <span class="team-text" style="position: absolute; bottom: -15px; right: -60px; font-size: 32px;">Team</span>
         </div>
     </div>
     """, unsafe_allow_html=True)
+
+# Define center alignment function once to avoid memory leaks
+def _center_align_style(val):
+    """Reusable center alignment function"""
+    return 'text-align: center'
 
 def style_dataframe(df, percentage_cols=None, add_grand_total=False):
     """Apply professional styling to dataframes with blue headers and no borders."""
     if df.empty:
         return df
 
-    # Create a copy to avoid modifying the original
-    styled_df = df.copy()
+    # Performance optimization: Don't copy for large datasets
+    if len(df) > 500:
+        st.warning(f"Large dataset ({len(df)} rows). Displaying without advanced styling for better performance.")
+        return df
 
     # Apply table styling with blue headers and no borders
-    styler = styled_df.style
+    styler = df.style
 
-    # Apply table styling with blue headers and no borders
+    # Simplified table styling for better performance
     styler = styler.set_table_styles([
         {'selector': 'th', 'props': [
             ('background-color', '#007BFF'),
             ('color', 'white'),
             ('font-weight', 'bold'),
             ('text-align', 'center'),
-            ('padding', '8px 6px'),  # Reduced padding
+            ('padding', '8px 6px'),
             ('border', 'none'),
-            ('font-size', '12px')  # Smaller font
+            ('font-size', '12px')
         ]},
         {'selector': 'td', 'props': [
             ('text-align', 'center'),
             ('padding', '10px 8px'),
-            ('border', 'none'),
-            ('border-radius', '8px')
+            ('border', 'none')
         ]},
         {'selector': 'table', 'props': [
             ('border-collapse', 'separate'),
             ('border-spacing', '0'),
             ('border', 'none'),
             ('border-radius', '10px'),
-            ('overflow', 'hidden'),
-            ('box-shadow', '0 4px 12px rgba(0,0,0,0.1)')
+            ('overflow', 'hidden')
         ]},
         {'selector': 'tr:nth-child(even)', 'props': [
             ('background-color', '#b8d4f0')
         ]},
         {'selector': 'tr:nth-child(odd)', 'props': [
             ('background-color', 'white')
-        ]},
-        {'selector': 'tr:hover', 'props': [
-            ('background-color', '#e3f2fd'),
-            ('transform', 'scale(1.02)'),
-            ('transition', 'all 0.2s ease')
         ]}
     ])
 
-    # Center align all content
-    def center_align(val):
-        return 'text-align: center'
-
-    styler = styler.map(center_align)
+    # Use the reusable center alignment function
+    styler = styler.map(_center_align_style)
 
     return styler
 
@@ -207,9 +196,6 @@ def create_table_header(title, subtitle=None):
 
 def display_overview(employee_df, shift_df, contract_report_df, city_report_df):
     """Display overview with metrics and charts."""
-    # Apply styling again to ensure it's active for this display
-    apply_custom_table_styling()
-
     st.header("Overview")
 
     # Only consider valid shift statuses for assignment
@@ -361,9 +347,6 @@ def display_unassigned_employees(employees_df: pd.DataFrame, shifts_df: pd.DataF
 
 def display_city_report(data, employee_data):
     """Display city-wise report with each city in its own tab, with tables and summary."""
-    # Apply styling again to ensure it's active for this display
-    apply_custom_table_styling()
-
     try:
         if data is None or data.empty:
             st.warning("No data available for city report")
@@ -502,11 +485,8 @@ def display_city_report(data, employee_data):
                         ]}
                     ])
 
-                    # Center align all content
-                    def center_align(val):
-                        return 'text-align: center'
-
-                    styler = styler.map(center_align)
+                    # Center align all content using reusable function
+                    styler = styler.map(_center_align_style)
 
                     st.dataframe(styler, use_container_width=True, hide_index=True)
 
@@ -663,10 +643,8 @@ def display_city_report(data, employee_data):
                         ]}
                     ])
 
-                    # Center align all content
-                    def center_align_city_summary(val):
-                        return 'text-align: center'
-                    summary_styler = summary_styler.map(center_align_city_summary)
+                    # Center align all content using reusable function
+                    summary_styler = summary_styler.map(_center_align_style)
 
                     st.dataframe(summary_styler, use_container_width=True, hide_index=True)
 
@@ -862,11 +840,8 @@ def display_contract_report(shift_df, employee_df):
                                 ]}
                             ])
 
-                            # Center align all content
-                            def center_align(val):
-                                return 'text-align: center'
-
-                            styler = styler.map(center_align)
+                            # Center align all content using reusable function
+                            styler = styler.map(_center_align_style)
 
                             # Create two columns: table and donut chart
                             col1, col2 = st.columns([2, 1])
@@ -1016,10 +991,8 @@ def display_contract_report(shift_df, employee_df):
                         ]}
                     ])
 
-                    # Center align all content
-                    def center_align_summary(val):
-                        return 'text-align: center'
-                    summary_styler = summary_styler.map(center_align_summary)
+                    # Center align all content using reusable function
+                    summary_styler = summary_styler.map(_center_align_style)
 
                     st.dataframe(summary_styler, use_container_width=True, hide_index=True)
 
