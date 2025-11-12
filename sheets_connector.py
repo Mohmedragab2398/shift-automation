@@ -69,14 +69,56 @@ class SheetsConnector:
                 if not values:
                     return pd.DataFrame()
                 
-                # Convert to DataFrame
-                df = pd.DataFrame(values[1:], columns=values[0])
+                # Handle empty header row - if first row is empty, skip it and use data rows
+                if not values[0] or len(values[0]) == 0:
+                    # If header is empty, skip first row and use data starting from row 2
+                    if len(values) > 1:
+                        # Find max columns in data rows
+                        max_cols = max(len(row) for row in values[1:]) if len(values) > 1 else 0
+                        if max_cols == 0:
+                            return pd.DataFrame()
+                        
+                        # Generate appropriate column names based on expected structure
+                        # Common column names for employee data (based on typical sheet structure)
+                        # Column order: employee_id, employee_name, city, contract_name, supervisors (column E)
+                        default_columns = ['employee_id', 'employee_name', 'city', 'contract_name', 'supervisors',
+                                         'full_name', 'contract', 'starting_point', 'supervisor']
+                        # Use default names if we have matching column count, otherwise use generic names
+                        if max_cols <= len(default_columns):
+                            column_names = default_columns[:max_cols]
+                        else:
+                            column_names = default_columns + [f'Column_{i+1}' for i in range(len(default_columns), max_cols)]
+                        
+                        # Create DataFrame skipping the empty first row
+                        df = pd.DataFrame(values[1:], columns=column_names[:max_cols])
+                    else:
+                        return pd.DataFrame()
+                else:
+                    # Normal case: first row is header
+                    # Ensure all rows have the same length as header
+                    header_len = len(values[0])
+                    max_cols = max(len(row) for row in values) if values else header_len
+                    
+                    # Pad header if needed
+                    if len(values[0]) < max_cols:
+                        values[0].extend([f'Column_{i+1}' for i in range(len(values[0]), max_cols)])
+                    
+                    # Pad data rows to match header length
+                    padded_values = []
+                    for row in values[1:]:
+                        padded_row = row + [''] * (max_cols - len(row)) if len(row) < max_cols else row[:max_cols]
+                        padded_values.append(padded_row)
+                    
+                    df = pd.DataFrame(padded_values, columns=values[0][:max_cols])
+                
                 return df
             
             raise Exception("No valid input source provided")
             
         except Exception as e:
             print(f"Warning: Error reading sheet: {str(e)}")
+            import traceback
+            print(f"Traceback: {traceback.format_exc()}")
             return pd.DataFrame()
 
     def update_sheet(self, spreadsheet_id, range_name, df):
@@ -181,7 +223,7 @@ class SheetsConnector:
                 raise Exception("Gspread client not initialized")
 
             sheet = self.gspread_client.open_by_key(spreadsheet_id)
-            worksheet = sheet.worksheet("all2")
+            worksheet = sheet.worksheet("all")
             data = worksheet.get_all_values()
 
             print("Fetched rows:", len(data))
@@ -194,13 +236,13 @@ class SheetsConnector:
             return None
 
     def get_all_sheet_data(self):
-        """Get data from the all2 sheet (used by both workflows)."""
+        """Get data from the all sheet (used by both workflows)."""
         try:
             if not self.gspread_client:
                 raise Exception("Gspread client not initialized")
 
             sheet = self.gspread_client.open_by_key(st.secrets["spreadsheet_id"])
-            worksheet = sheet.worksheet("all2")
+            worksheet = sheet.worksheet("all")
             data = worksheet.get_all_values()
 
             if not data:
@@ -211,7 +253,7 @@ class SheetsConnector:
             return df
             
         except Exception as e:
-            print(f"Warning: Error reading all2 sheet: {str(e)}")
+            print(f"Warning: Error reading all sheet: {str(e)}")
             return None
 
 

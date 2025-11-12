@@ -4,8 +4,6 @@ import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
 from data_sanitizer import DataSanitizer, validate_data
-from check_inactive import InactiveRidersChecker
-from evaluated import EvaluatedProcessor
 from sheets_connector import SheetsConnector
 import logging
 
@@ -239,47 +237,6 @@ def display_overview(employee_df, shift_df, contract_report_df, city_report_df):
         )
         st.plotly_chart(city_fig, use_container_width=True)
 
-def display_daily_shifts(df, date):
-    """Display daily shifts with improved formatting."""
-    if df is None or (isinstance(df, pd.DataFrame) and df.empty):
-        st.warning(f"No shift data available for {date}")
-        return
-
-    # Defensive filter: only show shifts for the exact date
-    df = df[df['planned_start_date'] == date] if 'planned_start_date' in df.columns else df
-
-    # Add header
-    st.markdown(f"<div class='header-style'>Daily Shifts - {date}</div>", unsafe_allow_html=True)
-
-    # Display metrics
-    total_shifts = len(df)
-    unique_employees = len(df['employee'].unique()) if 'employee' in df.columns else len(df['employee_id'].unique())
-
-    col1, col2 = st.columns(2)
-    with col1:
-        st.metric("Total Shifts", total_shifts)
-    with col2:
-        st.metric("Unique Employees", unique_employees)
-
-    # Add All Shifts Update button
-    if st.button("All Shifts Update", key=f"all_shifts_{date}"):
-        # Display all shifts in one table
-        display_df = df.copy()
-        if 'employee_id' in display_df.columns:
-            display_df['employee'] = display_df['employee_id']
-
-        display_df = display_df[[
-            'employee', 'planned_start_time', 'planned_end_time'
-        ]].sort_values('planned_start_time')
-
-        # Format planned_start_time and planned_end_time as Time (HH:MM)
-        for col in ['planned_start_time', 'planned_end_time']:
-            if col in display_df.columns:
-                display_df[col] = pd.to_datetime(display_df[col], errors='coerce').dt.strftime('%H:%M')
-
-        # Display table with styling
-        st.dataframe(style_dataframe(display_df, ['Assigned_Percentage']), use_container_width=True, hide_index=True)
-
 def display_unassigned_employees(employees_df: pd.DataFrame, shifts_df: pd.DataFrame, selected_date: str):
     """Display employees who have no shifts assigned for the selected date."""
     if employees_df is None or shifts_df is None or employees_df.empty or shifts_df.empty:
@@ -319,19 +276,42 @@ def display_unassigned_employees(employees_df: pd.DataFrame, shifts_df: pd.DataF
         if not unassigned_df.empty:
             st.subheader(f"Unassigned Employees for {selected_date}")
 
-            # Add contract filter dropdown with unique key based on date
-            contracts = ['All Contracts'] + sorted(unassigned_df['contract_name'].unique().tolist())
-            selected_contract = st.selectbox(
-                'Filter by Contract:',
-                contracts,
-                key=f"contract_select_{selected_date}"  # Unique key for each date
+            # Add city filter dropdown with unique key based on date
+            cities = ['All Cities'] + sorted(unassigned_df['city'].unique().tolist())
+            selected_city = st.selectbox(
+                'Filter by City:',
+                cities,
+                key=f"city_select_{selected_date}"  # Unique key for each date
             )
 
-            # Filter by selected contract
-            if selected_contract != 'All Contracts':
-                display_df = unassigned_df[unassigned_df['contract_name'] == selected_contract]
+            # Filter by selected city
+            if selected_city != 'All Cities':
+                display_df = unassigned_df[unassigned_df['city'] == selected_city]
             else:
                 display_df = unassigned_df
+
+            # Create doughnut chart showing city distribution of unassigned employees
+            if not display_df.empty:
+                city_counts = display_df['city'].value_counts()
+                if len(city_counts) > 0:
+                    fig = px.pie(
+                        values=city_counts.values,
+                        names=city_counts.index,
+                        title='Unassigned Employees by City',
+                        hole=0.4,  # This creates the donut effect
+                        color_discrete_sequence=px.colors.qualitative.Bold
+                    )
+                    fig.update_layout(
+                        legend=dict(
+                            orientation="h",
+                            yanchor="bottom",
+                            y=-0.2,
+                            xanchor="center",
+                            x=0.5
+                        ),
+                        margin=dict(t=60, b=60, l=20, r=20)
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
 
             # Display data without styling
             display_columns = ['employee_id', 'employee_name', 'contract_name', 'city']
@@ -342,6 +322,135 @@ def display_unassigned_employees(employees_df: pd.DataFrame, shifts_df: pd.DataF
     except Exception as e:
         st.error(f"Error displaying unassigned employees: {str(e)}")
         logger.error(f"Error in display_unassigned_employees: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
+
+def display_supervisors_report(employees_df: pd.DataFrame, shifts_df: pd.DataFrame, date_range):
+    """Display supervisors report with sub-tabs for each supervisor showing assigned and unassigned employees."""
+    try:
+        if employees_df is None or employees_df.empty:
+            st.warning("No employee data available for supervisors report.")
+            return
+        
+        if shifts_df is None or shifts_df.empty:
+            st.warning("No shift data available for supervisors report.")
+            return
+
+        # Check if supervisor column exists (handle both singular and plural)
+        supervisor_col = None
+        if 'supervisor' in employees_df.columns:
+            supervisor_col = 'supervisor'
+        elif 'supervisors' in employees_df.columns:
+            supervisor_col = 'supervisors'
+        else:
+            # Try to find any column that might be supervisor (case insensitive)
+            for col in employees_df.columns:
+                if 'supervisor' in str(col).lower():
+                    supervisor_col = col
+                    break
+        
+        if supervisor_col is None:
+            st.warning("Supervisor column not found in employee data. Please ensure column E contains supervisor names.")
+            st.info(f"Available columns: {', '.join(employees_df.columns.tolist())}")
+            return
+
+        # Filter out employees without supervisor names
+        employees_with_supervisor = employees_df[employees_df[supervisor_col].notna() & (employees_df[supervisor_col].astype(str).str.strip() != '')].copy()
+        
+        if employees_with_supervisor.empty:
+            st.warning("No employees with supervisor information found.")
+            return
+
+        # Get unique supervisors
+        supervisors = sorted(employees_with_supervisor[supervisor_col].unique().tolist())
+        
+        if not supervisors:
+            st.warning("No supervisors found in the data.")
+            return
+
+        # Create tabs for each supervisor
+        supervisor_tabs = st.tabs(supervisors)
+
+        for i, supervisor in enumerate(supervisors):
+            with supervisor_tabs[i]:
+                # Get employees for this supervisor
+                supervisor_employees = employees_with_supervisor[employees_with_supervisor[supervisor_col] == supervisor].copy()
+                
+                # Process each date in the range
+                for date in date_range:
+                    date_str = pd.to_datetime(date).strftime('%Y-%m-%d')
+                    date_display = date.date() if hasattr(date, 'date') else date
+                    
+                    st.markdown(f"### {supervisor} - {date_str}")
+                    
+                    # Filter shifts for this date
+                    shifts_df_copy = shifts_df.copy()
+                    if 'planned_start_date' in shifts_df_copy.columns:
+                        shifts_df_copy['planned_start_date'] = pd.to_datetime(shifts_df_copy['planned_start_date']).dt.date
+                        date_shifts = shifts_df_copy[shifts_df_copy['planned_start_date'] == date_display]
+                    else:
+                        date_shifts = pd.DataFrame()
+                    
+                    # Get assigned and unassigned employees for this supervisor and date
+                    if not date_shifts.empty:
+                        assigned_employee_ids = date_shifts['employee_id'].unique()
+                        assigned_employees = supervisor_employees[supervisor_employees['employee_id'].isin(assigned_employee_ids)].copy()
+                        unassigned_employees = supervisor_employees[~supervisor_employees['employee_id'].isin(assigned_employee_ids)].copy()
+                    else:
+                        assigned_employees = pd.DataFrame()
+                        unassigned_employees = supervisor_employees.copy()
+                    
+                    # Calculate metrics
+                    total = len(supervisor_employees)
+                    assigned_count = len(assigned_employees)
+                    unassigned_count = len(unassigned_employees)
+                    assignment_rate = (assigned_count / total * 100) if total > 0 else 0
+                    
+                    # Display metrics
+                    col1, col2, col3, col4 = st.columns(4)
+                    with col1:
+                        st.metric("Total Employees", total)
+                    with col2:
+                        st.metric("Assigned", assigned_count)
+                    with col3:
+                        st.metric("Unassigned", unassigned_count)
+                    with col4:
+                        st.metric("Assignment Rate", f"{assignment_rate:.1f}%")
+                    
+                    # Create two columns for assigned and unassigned
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        st.markdown(f"#### ✅ Assigned Employees ({assigned_count})")
+                        if not assigned_employees.empty:
+                            display_cols = ['employee_id', 'employee_name', 'city', 'contract_name']
+                            display_cols = [col for col in display_cols if col in assigned_employees.columns]
+                            st.dataframe(
+                                assigned_employees[display_cols].sort_values('employee_name'),
+                                use_container_width=True,
+                                hide_index=True
+                            )
+                        else:
+                            st.info("No assigned employees for this date.")
+                    
+                    with col2:
+                        st.markdown(f"#### ❌ Unassigned Employees ({unassigned_count})")
+                        if not unassigned_employees.empty:
+                            display_cols = ['employee_id', 'employee_name', 'city', 'contract_name']
+                            display_cols = [col for col in display_cols if col in unassigned_employees.columns]
+                            st.dataframe(
+                                unassigned_employees[display_cols].sort_values('employee_name'),
+                                use_container_width=True,
+                                hide_index=True
+                            )
+                        else:
+                            st.success("All employees are assigned for this date.")
+                    
+                    st.markdown("---")  # Separator between dates
+
+    except Exception as e:
+        st.error(f"Error displaying supervisors report: {str(e)}")
+        logger.error(f"Error in display_supervisors_report: {str(e)}")
         import traceback
         logger.error(traceback.format_exc())
 
@@ -490,30 +599,50 @@ def display_city_report(data, employee_data):
 
                     st.dataframe(styler, use_container_width=True, hide_index=True)
 
-                    # Add donut chart for contract distribution
+                    # Add donut chart showing Assigned vs Unassigned employees percentage
                     if not city_report.empty:
-                        # Create a donut chart showing contract distribution for this city and date
-                        fig = px.pie(
-                            city_report,
-                            values='Assigned',  # Use 'Assigned' values instead of 'Total'
-                            names='Contract',
-                            title=f'Contract Distribution in {city} on {date_str}',
-                            hole=0.4,  # This creates the donut effect
-                            color_discrete_sequence=px.colors.qualitative.Bold  # Use a distinct color palette
-                        )
-                        # Update layout for better appearance
-                        fig.update_layout(
-                            legend=dict(
-                                orientation="h",
-                                yanchor="bottom",
-                                y=-0.3,
-                                xanchor="center",
-                                x=0.5
-                            ),
-                            margin=dict(t=60, b=60, l=20, r=20)
-                        )
-                        # Display the chart
-                        st.plotly_chart(fig, use_container_width=True)
+                        # Calculate total assigned and unassigned for this city and date
+                        total_assigned = city_report['Assigned'].sum()
+                        total_unassigned = city_report['Unassigned'].sum()
+                        total_employees = total_assigned + total_unassigned
+                        
+                        if total_employees > 0:
+                            # Create a donut chart showing Assigned vs Unassigned percentage
+                            fig = go.Figure(data=[go.Pie(
+                                labels=['Assigned', 'Unassigned'],
+                                values=[total_assigned, total_unassigned],
+                                hole=0.6,  # This creates the donut effect
+                                marker_colors=['#28a745', '#dc3545'],
+                                textinfo='label+percent',
+                                textposition='outside'
+                            )])
+                            
+                            # Calculate percentage
+                            assigned_percentage = (total_assigned / total_employees * 100) if total_employees > 0 else 0
+                            
+                            # Add title and center text
+                            fig.update_layout(
+                                title=f'Assignment Status in {city} on {date_str}',
+                                annotations=[dict(
+                                    text=f'<b>{assigned_percentage:.1f}%<br>Assigned</b>',
+                                    x=0.5,
+                                    y=0.5,
+                                    font=dict(size=20),
+                                    showarrow=False
+                                )],
+                                showlegend=True,
+                                legend=dict(
+                                    orientation="h",
+                                    yanchor="bottom",
+                                    y=-0.2,
+                                    xanchor="center",
+                                    x=0.5
+                                ),
+                                height=400,
+                                margin=dict(t=60, b=60, l=20, r=20)
+                            )
+                            # Display the chart
+                            st.plotly_chart(fig, use_container_width=True)
 
                 # Add Summary Table for All Dates (side by side)
                 st.markdown("### Summary View (All Dates)")
@@ -1006,7 +1135,7 @@ def main():
 
     workflow = st.sidebar.selectbox(
         "Select Workflow",
-        ["Shifts Update", "Check Inactive Riders", "Evaluated"]
+        ["Shifts Update"]
     )
 
     if workflow == "Shifts Update":
@@ -1025,7 +1154,7 @@ def main():
             st.markdown("""
             Please check:
             1. The sheet is shared with: `sheet-accessa@shift-automation-458000.iam.gserviceaccount.com`
-            2. The sheet contains data in the 'all2' tab
+            2. The sheet contains data in the 'all' tab
             3. The sheet ID is correct in .streamlit/secrets.toml
             4. You have enabled the Google Sheets API in your Google Cloud Console
             """)
@@ -1042,7 +1171,7 @@ def main():
                     try:
                         employee_df = st.session_state.sheets_connector.read_sheet(
                             spreadsheet_id=SPREADSHEET_ID,
-                            range_name='all2!A1:Z'
+                            range_name='all!A1:Z'
                         )
                         if employee_df is not None and not employee_df.empty:
                             employee_df.columns = [str(col).strip().lower().replace(' ', '_') for col in employee_df.columns]
@@ -1069,7 +1198,7 @@ def main():
                             st.error("No data was returned from Google Sheets. Please check:")
                             st.markdown("""
                             1. The sheet is shared with: `sheet-accessa@shift-automation-458000.iam.gserviceaccount.com`
-                            2. The sheet contains data in the 'all2' tab
+                            2. The sheet contains data in the 'all' tab
                             3. The sheet ID is correct
                             """)
                     except Exception as e:
@@ -1151,10 +1280,10 @@ def main():
 
             tab1, tab2, tab3, tab4, tab5 = st.tabs([
                 "Overview",
-                "Daily Shifts",
                 "Unassigned Employees",
                 "Contract Report",
-                "City Report"
+                "City Report",
+                "Supervisors"
             ])
 
             with tab1:
@@ -1169,356 +1298,19 @@ def main():
             with tab2:
                 for date in date_range:
                     date_shifts = filtered_shifts.get(date.date(), pd.DataFrame())
-                    display_daily_shifts(date_shifts, date.date())
-
-            with tab3:
-                for date in date_range:
-                    date_shifts = filtered_shifts.get(date.date(), pd.DataFrame())
                     display_unassigned_employees(employee_df, date_shifts, date.date())
 
-            with tab4:
+            with tab3:
                 display_contract_report(filtered_shifts_df, employee_df)
 
-            with tab5:
+            with tab4:
                 display_city_report(filtered_shifts_df, employee_df)
+
+            with tab5:
+                display_supervisors_report(employee_df, filtered_shifts_df, date_range)
 
         except Exception as e:
             st.error(f"An error occurred: {str(e)}")
-
-    elif workflow == "Check Inactive Riders":
-        # --- Check Inactive Riders workflow ---
-        st.markdown('<h1 style="text-align: center; margin: 20px 0;">Check Inactive Riders</h1>', unsafe_allow_html=True)
-
-        # Use the same sheets_connector from the session state that Shifts Update uses
-        try:
-            if 'sheets_connector' not in st.session_state:
-                sheets_connector = SheetsConnector()
-                st.session_state['sheets_connector'] = sheets_connector
-
-            # Create inactive checker with the session's sheets connector
-            inactive_checker = InactiveRidersChecker()
-            inactive_checker.sheets_connector = st.session_state['sheets_connector']
-
-            # Use the same spreadsheet ID from secrets.toml
-            inactive_checker.spreadsheet_id = st.secrets["spreadsheet_id"]
-
-            # Date range selection
-            st.markdown("### Select Date Range")
-            col1, col2 = st.columns(2)
-            with col1:
-                start_date = st.date_input("Start Date", value=datetime.now() - timedelta(days=7))
-            with col2:
-                end_date = st.date_input("End Date", value=datetime.now())
-
-            if start_date > end_date:
-                st.error("Error: Start date must be before end date")
-            else:
-                # Create tabs for different data sources
-                sheets_tab, csv_tab = st.tabs(["Google Sheets Data", "CSV Upload"])
-
-                with sheets_tab:
-                    # Add a button to process Google Sheets data
-                    if st.button("Check Inactive Riders from Sheets", key="check_inactive_sheets_btn"):
-                        with st.spinner("Processing data from Google Sheets..."):
-                            try:
-                                results_df = inactive_checker.check_inactive_riders(
-                                    start_date.strftime("%Y-%m-%d"),
-                                    end_date.strftime("%Y-%m-%d")
-                                )
-
-                                if results_df is not None and not results_df.empty:
-                                    # Display results without the status messages
-                                    # Pass the source parameter to use a unique key for the sheets workflow
-                                    inactive_checker.display_results(results_df, show_messages=False, source="sheets")
-                                else:
-                                    st.info("No inactive riders found for the selected date range")
-                            except Exception as e:
-                                st.error(f"Error checking inactive riders: {str(e)}")
-
-                with csv_tab:
-                    # Option for CSV upload
-                    st.markdown("### Upload City CSV Files")
-                    st.markdown("""
-                    Please upload CSV files for each city:
-                    - Assiut
-                    - Beni Suef
-                    - Hurghada
-                    - Ismailia
-                    - Minya
-                    - Port Said
-                    - Suez
-                    """)
-
-                    # Move the file uploader inside the CSV tab
-                    uploaded_files = st.file_uploader(
-                        "Upload CSV files",
-                        type=['csv'],
-                        accept_multiple_files=True,
-                        key="inactive_riders_files"
-                    )
-
-                    if uploaded_files and st.button("Process Files", key="process_inactive_files"):
-                        with st.spinner("Processing uploaded files..."):
-                            try:
-                                # Convert date range to list of dates
-                                date_list = pd.date_range(start=start_date, end=end_date).date
-
-                                # Process the uploaded files
-                                combined_df = inactive_checker.process_uploaded_files(uploaded_files, date_list)
-
-                                if combined_df is not None and not combined_df.empty:
-                                    # Process the data to find inactive riders
-                                    results_df = inactive_checker.process_inactive_riders(combined_df)
-
-                                    if results_df is not None and not results_df.empty:
-                                        # Display results without the status messages
-                                        # Pass a unique key for the CSV upload workflow
-                                        inactive_checker.display_results(results_df, show_messages=False, source="csv")
-                                    else:
-                                        st.info("No inactive riders found for the selected date range")
-                                else:
-                                    st.error("No valid data found in the uploaded files")
-                            except Exception as e:
-                                st.error(f"Error processing files: {str(e)}")
-        except Exception as e:
-            st.error(f"Error initializing Google Sheets connection: {str(e)}")
-            st.markdown("""
-            Please check:
-            1. The sheet is shared with: `sheet-accessa@shift-automation-458000.iam.gserviceaccount.com`
-            2. The sheet contains data in the 'all2' tab
-            3. The sheet ID is correct in .streamlit/secrets.toml
-            4. You have enabled the Google Sheets API in your Google Cloud Console
-            """)
-
-    elif workflow == "Evaluated":
-        # --- Evaluated workflow ---
-        st.markdown('<h1 style="text-align: center; margin: 20px 0;">Evaluated</h1>', unsafe_allow_html=True)
-
-        # Use the same sheets_connector from the session state
-        try:
-            if 'sheets_connector' not in st.session_state:
-                sheets_connector = SheetsConnector()
-                st.session_state['sheets_connector'] = sheets_connector
-
-            # Create evaluated processor with the session's sheets connector
-            evaluated_processor = EvaluatedProcessor()
-            evaluated_processor.sheets_connector = st.session_state['sheets_connector']
-
-            # Use the same spreadsheet ID from secrets.toml
-            evaluated_processor.spreadsheet_id = st.secrets["spreadsheet_id"]
-
-            # Get employee data from Google Sheets
-            with st.spinner("Fetching employee data from Google Sheets..."):
-                employee_data = evaluated_processor.get_all_employees()
-                if employee_data is None:
-                    st.error("Failed to fetch employee data from Google Sheets")
-
-            # File upload section
-            st.markdown("### Upload City Files")
-            st.markdown("""
-            Please upload Excel or CSV files for each city:
-            - Assiut
-            - Beni Suef
-            - Hurghada
-            - Ismailia
-            - Minya
-            - Port Said
-            - Suez
-            """)
-
-            uploaded_files = st.file_uploader(
-                "Upload files",
-                type=['xlsx', 'xls', 'csv'],
-                accept_multiple_files=True,
-                key="evaluated_files"
-            )
-
-            if uploaded_files:
-                with st.spinner("Processing uploaded files..."):
-                    # Process the uploaded files
-                    combined_df = evaluated_processor.process_uploaded_files(uploaded_files)
-
-                    if combined_df is not None and not combined_df.empty:
-                        st.success(f"Successfully processed {len(uploaded_files)} files with {len(combined_df)} records")
-
-                        # Add contract name and city columns
-                        processed_df = evaluated_processor.add_contract_and_city(combined_df, employee_data)
-
-                        if processed_df is not None and not processed_df.empty:
-                            # Date selection
-                            st.markdown("### Select Dates to Evaluate")
-
-                            # Get unique dates from the data - only use planned dates for simplicity
-                            planned_dates = []
-
-                            # Ensure date columns are datetime type
-                            if 'planned_start_date' in processed_df.columns:
-                                if not pd.api.types.is_datetime64_any_dtype(processed_df['planned_start_date']):
-                                    processed_df['planned_start_date'] = pd.to_datetime(processed_df['planned_start_date'], errors='coerce')
-                                # Get unique dates
-                                planned_dates = sorted(processed_df['planned_start_date'].dropna().dt.date.unique())
-
-                            # Simplified date selection - just use planned dates
-                            if planned_dates:
-                                selected_planned_dates = st.multiselect(
-                                    "Select planned dates to evaluate",
-                                    options=planned_dates,
-                                    default=planned_dates[:1] if planned_dates else None
-                                )
-                            else:
-                                st.warning("No planned dates found in the data")
-                                selected_planned_dates = []
-
-                            # Set actual_dates to empty list since we're only using planned dates
-                            selected_actual_dates = []
-
-                            # Filter data by selected dates
-                            if selected_planned_dates or selected_actual_dates:
-                                filtered_df = evaluated_processor.filter_by_dates(
-                                    processed_df,
-                                    selected_planned_dates,
-                                    selected_actual_dates
-                                )
-
-                                if filtered_df is not None and not filtered_df.empty:
-                                    # Remove duplicates
-                                    unique_df = evaluated_processor.remove_duplicates(filtered_df)
-
-                                    if unique_df is not None and not unique_df.empty:
-                                        # Use only planned dates
-                                        all_selected_dates = sorted(selected_planned_dates)
-
-                                        if all_selected_dates:
-                                            for date in all_selected_dates:
-                                                st.markdown(f"## Evaluation Report for {date.strftime('%Y-%m-%d')}")
-
-                                                # Get all data for this date
-                                                date_df = evaluated_processor.get_data_for_date(unique_df, date)
-
-                                                if date_df is not None and not date_df.empty:
-                                                    # Get unique shift statuses
-                                                    shift_statuses = date_df['shift_status'].dropna().unique()
-
-                                                    # Create tabs for different shift statuses
-                                                    status_tabs = []
-
-                                                    # Always include "ALL" tab
-                                                    status_tabs.append("ALL")
-
-                                                    # Add a combined "NO-SHOW" tab instead of individual NO-SHOW statuses
-                                                    status_tabs.append("NO-SHOW")
-
-                                                    # Add other statuses (excluding NO-SHOW related ones)
-                                                    for status in shift_statuses:
-                                                        if 'NO' not in str(status).upper() or 'SHOW' not in str(status).upper():
-                                                            if status not in status_tabs:
-                                                                status_tabs.append(status)
-
-                                                    # Create tabs
-                                                    status_result_tabs = st.tabs(status_tabs)
-
-                                                    # ALL tab - show all data
-                                                    with status_result_tabs[0]:
-                                                        pivot_df = evaluated_processor.generate_pivot_summary(date_df, date)
-                                                        if pivot_df is not None and not pivot_df.empty:
-                                                            st.markdown("#### Total Employees by Contract and City")
-                                                            evaluated_processor.display_results(
-                                                                pivot_df,
-                                                                date,
-                                                                show_messages=False,
-                                                                source=f"all_{date.strftime('%Y%m%d')}"
-                                                            )
-
-                                                            # Add debug export button
-                                                            st.markdown("#### 🔍 Debug Information")
-                                                            st.markdown("Download detailed data to analyze discrepancies:")
-                                                            evaluated_processor.export_debug_data(
-                                                                date_df,
-                                                                date,
-                                                                source=f"debug_all_{date.strftime('%Y%m%d')}"
-                                                            )
-
-                                                    # Status-specific tabs
-                                                    for i, status in enumerate(status_tabs):
-                                                        if i > 0:  # Skip the ALL tab which we already handled
-                                                            with status_result_tabs[i]:
-                                                                # Special handling for the combined NO-SHOW tab
-                                                                if status == "NO-SHOW":
-                                                                    # Create a mask for all NO-SHOW related statuses
-                                                                    no_show_mask = date_df['shift_status'].apply(
-                                                                        lambda x: 'NO' in str(x).upper() and 'SHOW' in str(x).upper()
-                                                                    )
-                                                                    status_filtered_df = date_df[no_show_mask].copy()
-                                                                    tab_title = "#### Employees with NO-SHOW Status by Contract and City"
-                                                                else:
-                                                                    # Regular status filtering
-                                                                    status_filtered_df = date_df[date_df['shift_status'] == status].copy()
-                                                                    tab_title = f"#### Employees with Status '{status}' by Contract and City"
-
-                                                                if not status_filtered_df.empty:
-                                                                    # Normalize contract names before creating the pivot
-                                                                    status_filtered_df['contract_name'] = status_filtered_df['contract_name'].apply(
-                                                                        evaluated_processor.normalize_contract_name
-                                                                    )
-
-                                                                    # Filter out invalid contract-city combinations
-                                                                    valid_rows = []
-                                                                    for idx, row in status_filtered_df.iterrows():
-                                                                        if evaluated_processor.is_valid_contract_city(row['contract_name'], row['city']):
-                                                                            valid_rows.append(idx)
-
-                                                                    # Keep only valid contract-city combinations
-                                                                    status_filtered_df = status_filtered_df.loc[valid_rows]
-
-                                                                    if status_filtered_df.empty:
-                                                                        st.info(f"No valid contract-city combinations found for status '{status}'")
-                                                                        continue
-
-                                                                    # Use the regular pivot summary method since we already filtered the data
-                                                                    pivot_df = pd.pivot_table(
-                                                                        status_filtered_df,
-                                                                        index='contract_name',
-                                                                        columns='city',
-                                                                        values='employee_id',
-                                                                        aggfunc='count',
-                                                                        fill_value=0
-                                                                    ).reset_index()
-
-                                                                    # Add a total column
-                                                                    if not pivot_df.empty and len(pivot_df.columns) > 1:
-                                                                        pivot_df['Total'] = pivot_df.iloc[:, 1:].sum(axis=1)
-
-                                                                    if pivot_df is not None and not pivot_df.empty:
-                                                                        st.markdown(tab_title)
-                                                                        evaluated_processor.display_results(
-                                                                            pivot_df,
-                                                                            date,
-                                                                            show_messages=False,
-                                                                            source=f"{status.replace('-', '_')}_{date.strftime('%Y%m%d')}"
-                                                                        )
-                                                                else:
-                                                                    st.info(f"No employees with {status} status found for {date.strftime('%Y-%m-%d')}")
-                                                else:
-                                                    st.info(f"No data found for {date.strftime('%Y-%m-%d')}")
-                                        else:
-                                            st.warning("Please select at least one date to evaluate")
-                                    else:
-                                        st.error("No unique records found after filtering")
-                                else:
-                                    st.error("No data found for the selected dates")
-                            else:
-                                st.warning("Please select at least one date to evaluate")
-                        else:
-                            st.error("Failed to process data with contract and city information")
-                    else:
-                        st.error("No valid data found in the uploaded files")
-            else:
-                st.info("Please upload Excel files to evaluate")
-
-        except Exception as e:
-            st.error(f"Error in Evaluated workflow: {str(e)}")
-            import traceback
-            print(f"Error details: {traceback.format_exc()}")
 
 if __name__ == "__main__":
     main()

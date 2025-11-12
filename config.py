@@ -1,25 +1,17 @@
 CONFIG = {
     'contracts': {
-        'Al Abtal': ['Hurghada', 'Port said'],
-        'Al Alamia': ['Ismalia', 'Port said', 'Suez'],
-        'Ebad El rahman': ['Hurghada', 'Minya'],
-        'El Tohami': ['Assiut', 'Hurghada', 'Minya', 'Suez', 'Beni Suef'],
-        'MTA': ['Hurghada', 'Port said'],
-        'Stop Car': ['Hurghada', 'Ismalia', 'Port said', 'Suez', 'Beni Suef'],
-        'Tanta Car': ['Ismalia', 'Port said', 'Suez'],
-        'Tantawy': ['Assiut', 'Hurghada', 'Ismalia', 'Port said', 'Suez'],
-        'Team mh for Delivery': ['Hurghada', 'Suez'],
-        'Wasaly': ['Assiut'],
-        'Zero Zero Seven': ['Assiut', 'Hurghada']
+        'Zero Zero Seven': ['Cairo', 'Assiut', 'Hurghada', 'Minya', 'Port Said', 'Mansoura', 'Damanhour', 'Al Mahallah Al Kubra', 'Alexandria']
     },
     'cities': [
+        'Cairo',
         'Assiut',
-        'Beni Suef',
         'Hurghada',
-        'Ismalia',
         'Minya',
-        'Port said',
-        'Suez'
+        'Port Said',
+        'Mansoura',
+        'Damanhour',
+        'Al Mahallah Al Kubra',
+        'Alexandria'
     ],
     'columns_to_keep': [
         'employee id',

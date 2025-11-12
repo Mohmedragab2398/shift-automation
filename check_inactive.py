@@ -7,17 +7,17 @@ class InactiveRidersChecker:
     def __init__(self):
         self.sheets_connector = SheetsConnector()
         self.spreadsheet_id = st.secrets["spreadsheet_id"]  # Use the spreadsheet ID from secrets.toml
-        self.cities = ['Assiut', 'Beni Suef', 'Hurghada', 'Ismailia', 'Minya', 'Port Said', 'Suez']
+        self.cities = ['Cairo', 'Assiut', 'Hurghada', 'Minya', 'Port Said', 'Mansoura', 'Damanhour', 'Al Mahallah Al Kubra', 'Alexandria']
 
     def get_all_employees(self):
-        """Get all employees from the all2 sheet with standardized columns."""
+        """Get all employees from the all sheet with standardized columns."""
         try:
             # Use the get_all_sheet_data method which is more reliable
             all_data = self.sheets_connector.get_all_sheet_data()
 
             # Check if data is None, empty, or only contains headers
             if all_data is None or all_data.empty or len(all_data) <= 1:
-                st.error("No data found or insufficient data in all2 sheet")
+                st.error("No data found or insufficient data in all sheet")
                 return None
 
             # Standardize column names
@@ -135,7 +135,7 @@ class InactiveRidersChecker:
             start_date = pd.to_datetime(start_date_str)
             end_date = pd.to_datetime(end_date_str)
 
-            # Get all employees from the all2 sheet
+            # Get all employees from the all sheet
             with st.spinner("Fetching employee data..."):
                 all_employees = self.get_all_employees()
                 if all_employees is None:
@@ -325,7 +325,7 @@ class InactiveRidersChecker:
             if combined_df is None or combined_df.empty:
                 return None
 
-            # Get all employees from the all2 sheet
+            # Get all employees from the all sheet
             with st.spinner("Fetching employee data..."):
                 all_employees = self.get_all_employees()
                 if all_employees is None:
@@ -334,7 +334,7 @@ class InactiveRidersChecker:
             # Get active employees from the combined data
             active_ids = set(combined_df['employee_id'].astype(str).dropna().unique())
 
-            # Get all employee IDs from the all2 sheet
+            # Get all employee IDs from the all sheet
             all_ids = set(all_employees['employee_id'].astype(str).dropna().unique())
 
             # Find inactive IDs (those in all_ids but not in active_ids)

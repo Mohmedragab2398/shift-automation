@@ -9,37 +9,27 @@ class EvaluatedProcessor:
         """Initialize the Evaluated Processor with necessary configurations."""
         self.sheets_connector = SheetsConnector()
         self.spreadsheet_id = st.secrets["spreadsheet_id"]  # Use the spreadsheet ID from secrets.toml
-        self.cities = ['Assiut', 'Beni Suef', 'Hurghada', 'Ismailia', 'Minya', 'Port Said', 'Suez']
+        self.cities = ['Cairo', 'Assiut', 'Hurghada', 'Minya', 'Port Said', 'Mansoura', 'Damanhour', 'Al Mahallah Al Kubra', 'Alexandria']
 
         # Mapping for starting points to cities
         self.starting_point_to_city = {
+            'Cairo SP': 'Cairo',
             'Assiut SP': 'Assiut',
-            'Old beni suef': 'Beni Suef',
             'Hurghada downtown sp': 'Hurghada',
             'Sheraton road sp': 'Hurghada',
             'Al dahar sp': 'Hurghada',
-            'Ismalia downtown': 'Ismailia',
             'Old minya sp': 'Minya',
             'New minya sp': 'Minya',
             'Port fouad sp': 'Port Said',
             'Portsaid sp': 'Port Said',
-            'Suez': 'Suez',
-            'Faisal sp': 'Suez'
+            'Mansoura SP': 'Mansoura',
+            'Damanhour SP': 'Damanhour',
+            'Al Mahallah Al Kubra SP': 'Al Mahallah Al Kubra',
+            'Alexandria SP': 'Alexandria'
         }
 
         # Standard contract names (canonical forms)
         self.contract_names = [
-            'Al Abtal',
-            'Al Alamia',
-            'Ebad El rahman',
-            'El Tohami',
-            'MTA',
-            'Stop Car',
-            'Tanta Car',  # Standardized to this form
-            'Tanta',      # Added as a separate contract from Tantawy
-            'Tantawy',
-            'Team mh for Delivery',
-            'Wasaly',
             'Zero Zero Seven'
         ]
 
@@ -48,60 +38,6 @@ class EvaluatedProcessor:
 
         # Contract name normalization mapping - all variations map to standard names
         self.contract_name_mapping = {
-            # Al Abtal variations
-            'AL ABTAL': 'Al Abtal',
-            'EL ABTAL': 'Al Abtal',
-            'ALABTAL': 'Al Abtal',
-
-            # Al Alamia variations
-            'AL ALAMIA': 'Al Alamia',
-            'ELALAMIA': 'Al Alamia',
-            'ALAMIA': 'Al Alamia',
-            'ALALAMIA': 'Al Alamia',
-            'AL ALMIA': 'Al Alamia',
-
-            # Ebad El rahman variations
-            'EBAD EL RAHMAN': 'Ebad El rahman',
-            'EBADELRAHMAN': 'Ebad El rahman',
-            'EBAD ELRAHMAN': 'Ebad El rahman',
-            'ELRAHMAN': 'Ebad El rahman',
-
-            # El Tohami variations
-            'EL TOHAMI': 'El Tohami',
-            'ELTOHAMI': 'El Tohami',
-            'ELTOHAMY': 'El Tohami',
-            'TOHAMI': 'El Tohami',
-
-            # MTA variations
-            'MTA': 'MTA',
-            'M.T.A': 'MTA',
-            'M T A': 'MTA',
-
-            # Stop Car variations
-            'STOP CAR': 'Stop Car',
-            'STOPCAR': 'Stop Car',
-            'STOP': 'Stop Car',
-
-            # Tanta Car variations - standardize all to Tanta Car
-            'TANTA CAR': 'Tanta Car',
-            'TANTACAR': 'Tanta Car',
-            'TAN CAR': 'Tanta Car',
-            'TANCAR': 'Tanta Car',
-
-            # Tanta variations (all map to Tantawy since Tanta is Tantawy)
-            'TANTA': 'Tantawy',
-
-            # Tantawy variations
-            'TANTAWY': 'Tantawy',
-
-            # Team mh for Delivery variations
-            'TEAM MH FOR DELIVERY': 'Team mh for Delivery',
-            'TEAM MH': 'Team mh for Delivery',
-            'TEAMMH': 'Team mh for Delivery',
-
-            # Wasaly variations
-            'WASALY': 'Wasaly',
-
             # Zero Zero Seven variations
             'ZERO ZERO SEVEN': 'Zero Zero Seven',
             '007': 'Zero Zero Seven',
@@ -115,28 +51,18 @@ class EvaluatedProcessor:
 
         # Contract to cities mapping (for reference)
         self.contract_to_cities = {
-            'Al Abtal': ['Hurghada', 'Port Said'],
-            'Al Alamia': ['Ismailia', 'Port Said', 'Suez'],
-            'Ebad El rahman': ['Hurghada', 'Minya'],
-            'El Tohami': ['Assiut', 'Beni Suef', 'Hurghada', 'Minya', 'Suez'],
-            'MTA': ['Hurghada', 'Port Said'],
-            'Stop Car': ['Hurghada', 'Beni Suef', 'Ismailia', 'Port Said', 'Suez'],
-            'Tanta Car': ['Ismailia', 'Port Said', 'Suez'],  # Tanta Car operates in these cities
-            'Tantawy': ['Assiut', 'Hurghada', 'Ismailia', 'Port Said', 'Suez'],  # Tanta is Tantawy
-            'Team mh for Delivery': ['Hurghada', 'Suez'],
-            'Wasaly': ['Assiut'],
-            'Zero Zero Seven': ['Assiut', 'Hurghada']
+            'Zero Zero Seven': ['Cairo', 'Assiut', 'Hurghada', 'Minya', 'Port Said', 'Mansoura', 'Damanhour', 'Al Mahallah Al Kubra', 'Alexandria']
         }
 
     def get_all_employees(self):
-        """Get all employees from the all2 sheet with standardized columns."""
+        """Get all employees from the all sheet with standardized columns."""
         try:
             # Use the get_all_sheet_data method which is more reliable
             all_data = self.sheets_connector.get_all_sheet_data()
 
             # Check if data is None, empty, or only contains headers
             if all_data is None or all_data.empty or len(all_data) <= 1:
-                st.error("No data found or insufficient data in all2 sheet")
+                st.error("No data found or insufficient data in all sheet")
                 return None
 
             # Standardize column names
@@ -436,20 +362,24 @@ class EvaluatedProcessor:
                 return city
 
         # Try more flexible matching if exact match not found
-        if 'assiut' in starting_point:
+        if 'cairo' in starting_point:
+            return 'Cairo'
+        elif 'assiut' in starting_point:
             return 'Assiut'
-        elif 'beni' in starting_point or 'suef' in starting_point:
-            return 'Beni Suef'
         elif 'hurghada' in starting_point or 'sheraton' in starting_point or 'dahar' in starting_point:
             return 'Hurghada'
-        elif 'isma' in starting_point:
-            return 'Ismailia'
         elif 'minya' in starting_point:
             return 'Minya'
         elif 'port' in starting_point or 'fouad' in starting_point:
             return 'Port Said'
-        elif 'suez' in starting_point or 'faisal' in starting_point:
-            return 'Suez'
+        elif 'mansoura' in starting_point:
+            return 'Mansoura'
+        elif 'damanhour' in starting_point:
+            return 'Damanhour'
+        elif 'mahallah' in starting_point or 'kubra' in starting_point:
+            return 'Al Mahallah Al Kubra'
+        elif 'alexandria' in starting_point:
+            return 'Alexandria'
 
         return None
 
@@ -495,25 +425,27 @@ class EvaluatedProcessor:
 
         # Handle specific city name variations
         city_mappings = {
+            'Cairo': 'Cairo',
+            'CAIRO': 'Cairo',
             'Port Said': 'Port Said',
             'Port said': 'Port Said',
             'PORT SAID': 'Port Said',
             'Portsaid': 'Port Said',
-            'Ismailia': 'Ismailia',
-            'Ismalia': 'Ismailia',  # Common misspelling
-            'ISMAILIA': 'Ismailia',
-            'ISMALIA': 'Ismailia',  # Another misspelling
-            'Beni Suef': 'Beni Suef',
-            'Beni suef': 'Beni Suef',
-            'BENI SUEF': 'Beni Suef',
             'Assiut': 'Assiut',
             'ASSIUT': 'Assiut',
             'Hurghada': 'Hurghada',
             'HURGHADA': 'Hurghada',
             'Minya': 'Minya',
             'MINYA': 'Minya',
-            'Suez': 'Suez',
-            'SUEZ': 'Suez'
+            'Mansoura': 'Mansoura',
+            'MANSOURA': 'Mansoura',
+            'Damanhour': 'Damanhour',
+            'DAMANHOUR': 'Damanhour',
+            'Al Mahallah Al Kubra': 'Al Mahallah Al Kubra',
+            'Al mahallah al kubra': 'Al Mahallah Al Kubra',
+            'AL MAHALLAH AL KUBRA': 'Al Mahallah Al Kubra',
+            'Alexandria': 'Alexandria',
+            'ALEXANDRIA': 'Alexandria'
         }
 
         return city_mappings.get(normalized, normalized)
