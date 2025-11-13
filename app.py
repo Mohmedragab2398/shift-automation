@@ -109,16 +109,13 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Display the Talabat ESM Team logo at the top
+# Display the 007 Team logo at the top
 col1, col2, col3 = st.columns([1, 2, 1])
 with col2:
     st.markdown("""
     <div class="logo-container">
-        <div class="logo-text">talabat</div>
-        <div class="logo-text" style="position: relative;">
-            ESM
-            <span class="team-text" style="position: absolute; bottom: -15px; right: -60px; font-size: 32px;">Team</span>
-        </div>
+        <div class="logo-text" style="color: #007BFF;">007</div>
+        <div class="team-text">Team</div>
     </div>
     """, unsafe_allow_html=True)
 
