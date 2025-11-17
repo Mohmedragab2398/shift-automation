@@ -221,7 +221,7 @@ def display_overview(employee_df, shift_df, contract_report_df, city_report_df):
             barmode='group',
             title='Employee Distribution by Contract'
         )
-        st.plotly_chart(contract_fig, use_container_width=True)
+        st.plotly_chart(contract_fig, use_container_width=True, key="overview_contract_chart")
 
     # Display city-wise metrics
     st.subheader("City-wise Distribution")
@@ -232,13 +232,79 @@ def display_overview(employee_df, shift_df, contract_report_df, city_report_df):
             names='City',
             title='Employee Distribution by City'
         )
-        st.plotly_chart(city_fig, use_container_width=True)
+        st.plotly_chart(city_fig, use_container_width=True, key="overview_city_chart")
 
 def display_unassigned_employees(employees_df: pd.DataFrame, shifts_df: pd.DataFrame, selected_date: str):
     """Display employees who have no shifts assigned for the selected date."""
-    if employees_df is None or shifts_df is None or employees_df.empty or shifts_df.empty:
-        st.warning("No data available to display unassigned employees.")
+    if employees_df is None or employees_df.empty:
+        st.warning("No employee data available to display unassigned employees.")
         return
+    
+    # Handle case where shifts_df might be empty (no shifts uploaded yet)
+    if shifts_df is None or shifts_df.empty:
+        # If no shifts, all employees are unassigned
+        unassigned_df = employees_df.copy()
+        unassigned_df = unassigned_df.sort_values('employee_name')
+        
+        total_employees = len(employees_df)
+        unassigned_count = len(unassigned_df)
+        assigned_count = 0
+        
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Total Employees", total_employees)
+        with col2:
+            st.metric("Assigned", assigned_count)
+        with col3:
+            st.metric("Unassigned", unassigned_count)
+        
+        st.subheader(f"Unassigned Employees for {selected_date}")
+        st.info("No shift data uploaded yet. All employees are shown as unassigned.")
+        
+        # Add city filter dropdown with unique key based on date
+        cities = ['All Cities'] + sorted(unassigned_df['city'].unique().tolist())
+        selected_city = st.selectbox(
+            'Filter by City:',
+            cities,
+            key=f"city_select_{selected_date}"
+        )
+        
+        # Filter by selected city
+        if selected_city != 'All Cities':
+            display_df = unassigned_df[unassigned_df['city'] == selected_city]
+        else:
+            display_df = unassigned_df
+        
+        # Create doughnut chart showing city distribution of unassigned employees
+        if not display_df.empty:
+            city_counts = display_df['city'].value_counts()
+            if len(city_counts) > 0:
+                fig = px.pie(
+                    values=city_counts.values,
+                    names=city_counts.index,
+                    title='Unassigned Employees by City',
+                    hole=0.4,
+                    color_discrete_sequence=px.colors.qualitative.Bold
+                )
+                fig.update_layout(
+                    legend=dict(
+                        orientation="h",
+                        yanchor="bottom",
+                        y=-0.2,
+                        xanchor="center",
+                        x=0.5
+                    ),
+                    margin=dict(t=60, b=60, l=20, r=20)
+                )
+                # Add unique key to prevent duplicate chart ID error
+                st.plotly_chart(fig, use_container_width=True, key=f"unassigned_chart_{selected_date}")
+        
+        # Display data
+        display_columns = ['employee_id', 'employee_name', 'contract_name', 'city']
+        display_columns = [col for col in display_columns if col in display_df.columns]
+        st.dataframe(display_df[display_columns], use_container_width=True, hide_index=True)
+        return
+    
     try:
         # Validate required columns exist
         required_employee_cols = ['employee_id', 'employee_name', 'contract_name', 'city']
@@ -249,13 +315,36 @@ def display_unassigned_employees(employees_df: pd.DataFrame, shifts_df: pd.DataF
             st.error(f"Missing required columns: {', '.join(missing_emp_cols + missing_shift_cols)}")
             return
 
+        # Optimize: Normalize employee IDs once for better matching
         employees_df = employees_df.copy()
+        employees_df['employee_id'] = employees_df['employee_id'].astype(str).str.strip()
+        
         shifts_df = shifts_df.copy()
-        shifts_df['planned_start_date'] = pd.to_datetime(shifts_df['planned_start_date']).dt.date
-        selected_date = pd.to_datetime(selected_date).date()
-        filtered_shifts = shifts_df[shifts_df['planned_start_date'] == selected_date]
-        assigned_employees = filtered_shifts['employee_id'].unique()
-        unassigned_df = employees_df[~employees_df['employee_id'].isin(assigned_employees)].copy()
+        shifts_df['employee_id'] = shifts_df['employee_id'].astype(str).str.strip()
+        
+        # Convert date and filter shifts for the selected date
+        if 'planned_start_date' in shifts_df.columns:
+            shifts_df['planned_start_date'] = pd.to_datetime(shifts_df['planned_start_date'], errors='coerce').dt.date
+        selected_date_obj = pd.to_datetime(selected_date).date() if isinstance(selected_date, str) else selected_date
+        
+        # Filter shifts for the specific date - only consider valid statuses
+        valid_statuses = ["EVALUATED", "PUBLISHED"]
+        if 'shift_status' in shifts_df.columns:
+            filtered_shifts = shifts_df[
+                (shifts_df['planned_start_date'] == selected_date_obj) &
+                (shifts_df['shift_status'].isin(valid_statuses))
+            ]
+        else:
+            filtered_shifts = shifts_df[shifts_df['planned_start_date'] == selected_date_obj]
+        
+        # Get assigned employee IDs (only those with valid shifts for this date)
+        if not filtered_shifts.empty:
+            assigned_employee_ids = set(filtered_shifts['employee_id'].unique())
+        else:
+            assigned_employee_ids = set()
+        
+        # Filter to get only unassigned employees
+        unassigned_df = employees_df[~employees_df['employee_id'].isin(assigned_employee_ids)].copy()
         unassigned_df = unassigned_df.sort_values('employee_name')
 
         total_employees = len(employees_df)
@@ -274,28 +363,28 @@ def display_unassigned_employees(employees_df: pd.DataFrame, shifts_df: pd.DataF
             st.subheader(f"Unassigned Employees for {selected_date}")
 
             # Add city filter dropdown with unique key based on date
-            cities = ['All Cities'] + sorted(unassigned_df['city'].unique().tolist())
+            cities = ['All Cities'] + sorted(unassigned_df['city'].dropna().unique().tolist())
             selected_city = st.selectbox(
                 'Filter by City:',
                 cities,
-                key=f"city_select_{selected_date}"  # Unique key for each date
+                key=f"city_select_{selected_date}"
             )
 
             # Filter by selected city
             if selected_city != 'All Cities':
-                display_df = unassigned_df[unassigned_df['city'] == selected_city]
+                display_df = unassigned_df[unassigned_df['city'] == selected_city].copy()
             else:
-                display_df = unassigned_df
+                display_df = unassigned_df.copy()
 
             # Create doughnut chart showing city distribution of unassigned employees
-            if not display_df.empty:
+            if not display_df.empty and 'city' in display_df.columns:
                 city_counts = display_df['city'].value_counts()
                 if len(city_counts) > 0:
                     fig = px.pie(
                         values=city_counts.values,
                         names=city_counts.index,
                         title='Unassigned Employees by City',
-                        hole=0.4,  # This creates the donut effect
+                        hole=0.4,
                         color_discrete_sequence=px.colors.qualitative.Bold
                     )
                     fig.update_layout(
@@ -308,11 +397,14 @@ def display_unassigned_employees(employees_df: pd.DataFrame, shifts_df: pd.DataF
                         ),
                         margin=dict(t=60, b=60, l=20, r=20)
                     )
-                    st.plotly_chart(fig, use_container_width=True)
+                    # Add unique key to prevent duplicate chart ID error
+                    st.plotly_chart(fig, use_container_width=True, key=f"unassigned_chart_{selected_date}")
 
-            # Display data without styling
+            # Display data - only show unassigned employees
             display_columns = ['employee_id', 'employee_name', 'contract_name', 'city']
-            st.dataframe(display_df[display_columns], use_container_width=True, hide_index=True)
+            display_columns = [col for col in display_columns if col in display_df.columns]
+            if not display_df.empty:
+                st.dataframe(display_df[display_columns], use_container_width=True, hide_index=True)
         else:
             st.success(f"All employees are assigned shifts for {selected_date}")
 
@@ -638,8 +730,8 @@ def display_city_report(data, employee_data):
                                 height=400,
                                 margin=dict(t=60, b=60, l=20, r=20)
                             )
-                            # Display the chart
-                            st.plotly_chart(fig, use_container_width=True)
+                            # Display the chart with unique key
+                            st.plotly_chart(fig, use_container_width=True, key=f"city_report_chart_{city}_{date_str}")
 
                 # Add Summary Table for All Dates (side by side)
                 st.markdown("### Summary View (All Dates)")
@@ -987,7 +1079,7 @@ def display_contract_report(shift_df, employee_df):
                                 )
 
                                 if donut_fig:
-                                    st.plotly_chart(donut_fig, use_container_width=True)
+                                    st.plotly_chart(donut_fig, use_container_width=True, key=f"contract_donut_{contract}_{date_str}")
 
                 # Add Summary Table for All Dates (side by side)
                 st.markdown("### Summary View (All Dates)")
@@ -1176,15 +1268,23 @@ def main():
                             st.session_state['employee_refresh'] = False
                             st.success(f"Successfully loaded {len(employee_df)} employee records from Google Sheets.")
                             try:
-                                display_df = employee_df.copy()
+                                # Optimize: Only show essential columns and limit display for large datasets
+                                essential_cols = ['employee_id', 'employee_name', 'contract_name', 'city', 'supervisors']
+                                display_cols = [col for col in essential_cols if col in employee_df.columns]
+                                
+                                if len(employee_df) > 500:
+                                    st.info(f"Large dataset ({len(employee_df)} records). Showing first 500 rows. Use filters to narrow down.")
+                                    display_df = employee_df[display_cols].head(500).copy()
+                                else:
+                                    display_df = employee_df[display_cols].copy()
+                                
+                                # Only convert to string for display, not all columns
                                 for col in display_df.columns:
                                     if pd.api.types.is_datetime64_any_dtype(display_df[col]):
                                         display_df[col] = display_df[col].dt.strftime('%Y-%m-%d %H:%M:%S')
-                                    elif pd.api.types.is_numeric_dtype(display_df[col]):
-                                        display_df[col] = display_df[col].fillna('').astype(str)
                                     else:
                                         display_df[col] = display_df[col].fillna('').astype(str).str.strip()
-                                display_df = display_df.astype(str)
+                                
                                 st.success(f"Displaying {len(display_df)} employee records.")
                                 st.dataframe(display_df, use_container_width=True, hide_index=True)
                             except Exception as e:
@@ -1204,15 +1304,23 @@ def main():
                 employee_df = st.session_state.get('employee_df', None)
                 if employee_df is not None and not employee_df.empty:
                     try:
-                        display_df = employee_df.copy()
+                        # Optimize: Only show essential columns and limit display for large datasets
+                        essential_cols = ['employee_id', 'employee_name', 'contract_name', 'city', 'supervisors']
+                        display_cols = [col for col in essential_cols if col in employee_df.columns]
+                        
+                        if len(employee_df) > 500:
+                            st.info(f"Large dataset ({len(employee_df)} records). Showing first 500 rows. Use filters to narrow down.")
+                            display_df = employee_df[display_cols].head(500).copy()
+                        else:
+                            display_df = employee_df[display_cols].copy()
+                        
+                        # Only convert to string for display, not all columns
                         for col in display_df.columns:
                             if pd.api.types.is_datetime64_any_dtype(display_df[col]):
                                 display_df[col] = display_df[col].dt.strftime('%Y-%m-%d %H:%M:%S')
-                            elif pd.api.types.is_numeric_dtype(display_df[col]):
-                                display_df[col] = display_df[col].fillna('').astype(str)
                             else:
                                 display_df[col] = display_df[col].fillna('').astype(str).str.strip()
-                        display_df = display_df.astype(str)
+                        
                         st.success(f"Displaying {len(display_df)} employee records.")
                         st.dataframe(display_df, use_container_width=True, hide_index=True)
                     except Exception as e:
@@ -1293,9 +1401,14 @@ def main():
                 )
 
             with tab2:
+                # Optimize: Process dates more efficiently
+                if len(date_range) > 7:
+                    st.info(f"Showing data for {len(date_range)} dates. This may take a moment...")
+                
                 for date in date_range:
-                    date_shifts = filtered_shifts.get(date.date(), pd.DataFrame())
-                    display_unassigned_employees(employee_df, date_shifts, date.date())
+                    date_key = date.date() if hasattr(date, 'date') else date
+                    date_shifts = filtered_shifts.get(date_key, pd.DataFrame())
+                    display_unassigned_employees(employee_df, date_shifts, date_key)
 
             with tab3:
                 display_contract_report(filtered_shifts_df, employee_df)
