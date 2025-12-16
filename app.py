@@ -130,14 +130,13 @@ def normalize_city_name(city):
         return city
     
     city_str = str(city).strip()
+    city_lower = city_str.lower().replace(' ', '').replace('-', '').replace('_', '')
     
     # Handle Port Said variations (most common issue)
-    port_said_variations = ['portsaid', 'port said', 'port-said', 'port_said', 'port  said', 'PORT SAID', 'Portsaid']
-    city_normalized = city_str.lower().replace(' ', '').replace('-', '').replace('_', '')
-    if city_normalized == 'portsaid':
+    if city_lower == 'portsaid':
         return 'Port Said'
     
-    # Handle other cities - keep as is but normalize capitalization
+    # Handle other cities - normalize to standard form
     city_mappings = {
         'cairo': 'Cairo',
         'assiut': 'Assiut',
@@ -146,18 +145,14 @@ def normalize_city_name(city):
         'mansoura': 'Mansoura',
         'damanhour': 'Damanhour',
         'almahallahalkubra': 'Al Mahallah Al Kubra',
-        'al mahallah al kubra': 'Al Mahallah Al Kubra',
         'al_mahallah_al_kubra': 'Al Mahallah Al Kubra',
+        'al-mahallah-al-kubra': 'Al Mahallah Al Kubra',
+        'al mahallah al kubra': 'Al Mahallah Al Kubra',
         'alexandria': 'Alexandria'
     }
     
-    normalized_lower = city_str.lower().strip()
-    if normalized_lower in city_mappings:
-        return city_mappings[normalized_lower]
-    
-    # Check for Port Said with spaces/dashes/underscores
-    if city_normalized == 'portsaid':
-        return 'Port Said'
+    if city_lower in city_mappings:
+        return city_mappings[city_lower]
     
     # Return title case for other cities
     return city_str.title()
@@ -299,19 +294,24 @@ def display_unassigned_employees(employees_df: pd.DataFrame, shifts_df: pd.DataF
         st.subheader(f"Unassigned Employees for {selected_date}")
         st.info("No shift data uploaded yet. All employees are shown as unassigned.")
 
+        # Normalize city names for consistent display and filtering
+        unassigned_df_normalized = unassigned_df.copy()
+        if 'city' in unassigned_df_normalized.columns:
+            unassigned_df_normalized['city'] = unassigned_df_normalized['city'].apply(normalize_city_name)
+        
         # Add city filter dropdown with unique key based on date
-        cities = ['All Cities'] + sorted(unassigned_df['city'].unique().tolist())
+        cities = ['All Cities'] + sorted(unassigned_df_normalized['city'].dropna().unique().tolist())
         selected_city = st.selectbox(
             'Filter by City:',
             cities,
             key=f"city_select_{selected_date}"
         )
-        
-        # Filter by selected city
+
+        # Filter by selected city (using normalized city names)
         if selected_city != 'All Cities':
-            display_df = unassigned_df[unassigned_df['city'] == selected_city]
+            display_df = unassigned_df_normalized[unassigned_df_normalized['city'] == selected_city].copy()
         else:
-            display_df = unassigned_df
+            display_df = unassigned_df_normalized.copy()
         
         # Create doughnut chart showing city distribution of unassigned employees
         if not display_df.empty:
@@ -400,19 +400,24 @@ def display_unassigned_employees(employees_df: pd.DataFrame, shifts_df: pd.DataF
         if not unassigned_df.empty:
             st.subheader(f"Unassigned Employees for {selected_date}")
 
+            # Normalize city names for consistent display and filtering
+            unassigned_df_normalized = unassigned_df.copy()
+            if 'city' in unassigned_df_normalized.columns:
+                unassigned_df_normalized['city'] = unassigned_df_normalized['city'].apply(normalize_city_name)
+            
             # Add city filter dropdown with unique key based on date
-            cities = ['All Cities'] + sorted(unassigned_df['city'].dropna().unique().tolist())
+            cities = ['All Cities'] + sorted(unassigned_df_normalized['city'].dropna().unique().tolist())
             selected_city = st.selectbox(
                 'Filter by City:',
                 cities,
                 key=f"city_select_{selected_date}"
             )
 
-            # Filter by selected city
+            # Filter by selected city (using normalized city names)
             if selected_city != 'All Cities':
-                display_df = unassigned_df[unassigned_df['city'] == selected_city].copy()
+                display_df = unassigned_df_normalized[unassigned_df_normalized['city'] == selected_city].copy()
             else:
-                display_df = unassigned_df.copy()
+                display_df = unassigned_df_normalized.copy()
 
             # Create doughnut chart showing city distribution of unassigned employees
             if not display_df.empty and 'city' in display_df.columns:
@@ -588,29 +593,25 @@ def display_city_report(data, employee_data):
             st.warning("No data available for city report")
             return
 
-        # Normalize city names in employee_data to ensure consistency (especially Port Said)
-        employee_data = employee_data.copy()
-        if 'city' in employee_data.columns:
-            employee_data['city'] = employee_data['city'].apply(normalize_city_name)
-        
-        # Normalize city names in shift data as well
-        data = data.copy()
-        if 'city' in data.columns:
-            data['city'] = data['city'].apply(normalize_city_name)
-
         # Process data for city report
         city_data = DataSanitizer.generate_city_report(data, employee_data)
         if city_data.empty:
             st.warning("No data available for city report after processing")
             return
 
-        # Get unique cities and dates
-        cities = sorted(employee_data['city'].unique())
+        # Normalize city names for consistent processing
+        employee_data_normalized = employee_data.copy()
+        if 'city' in employee_data_normalized.columns:
+            employee_data_normalized['city'] = employee_data_normalized['city'].apply(normalize_city_name)
+        
+        # Get unique cities and dates (using normalized city names)
+        cities = sorted(employee_data_normalized['city'].dropna().unique())
         dates = sorted(city_data['Date'].unique())
         tabs = st.tabs(cities)
         for i, city in enumerate(cities):
             with tabs[i]:
-                city_employees = employee_data[employee_data['city'] == city]
+                # Use normalized city names for filtering
+                city_employees = employee_data_normalized[employee_data_normalized['city'] == city]
                 total = len(city_employees)
                 city_shifts = data[data['employee_id'].isin(city_employees['employee_id'])]
                 assigned = len(city_shifts.drop_duplicates('employee_id')['employee_id']) if not city_shifts.empty else 0
@@ -820,10 +821,10 @@ def display_city_report(data, employee_data):
                 for contract in contracts:
                     row = {'Contract': contract}
 
-                    # Get contract employees for this city
-                    contract_city_employees = employee_data[
-                        (employee_data['contract_name'] == contract) &
-                        (employee_data['city'] == city)
+                    # Get contract employees for this city (using normalized city names)
+                    contract_city_employees = employee_data_normalized[
+                        (employee_data_normalized['contract_name'] == contract) &
+                        (employee_data_normalized['city'] == city)
                     ]
 
                     if len(contract_city_employees) > 0:
@@ -1023,12 +1024,12 @@ def display_contract_report(shift_df, employee_df):
                     ">Date: {date_str}</div>
                     """, unsafe_allow_html=True)
 
-                    # Group by city for this contract and date
+                    # Group by city for this contract and date (using normalized city names)
                     city_data = []
-                    for city in employee_df['city'].unique():
-                        city_employees = employee_df[
-                            (employee_df['contract_name'] == contract) &
-                            (employee_df['city'] == city)
+                    for city in employee_df_normalized['city'].dropna().unique():
+                        city_employees = employee_df_normalized[
+                            (employee_df_normalized['contract_name'] == contract) &
+                            (employee_df_normalized['city'] == city)
                         ]
                         if len(city_employees) > 0:
                             city_shifts = date_data[date_data['employee_id'].isin(city_employees['employee_id'])]
@@ -1312,11 +1313,6 @@ def main():
                         )
                         if employee_df is not None and not employee_df.empty:
                             employee_df.columns = [str(col).strip().lower().replace(' ', '_') for col in employee_df.columns]
-                            
-                            # Normalize city names to ensure Port Said and other cities are recognized correctly
-                            if 'city' in employee_df.columns:
-                                employee_df['city'] = employee_df['city'].apply(normalize_city_name)
-                            
                             st.session_state['employee_df'] = employee_df
                             st.session_state['employee_refresh'] = False
                             st.success(f"Successfully loaded {len(employee_df)} employee records from Google Sheets.")
