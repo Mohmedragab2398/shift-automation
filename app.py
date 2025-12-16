@@ -124,6 +124,44 @@ def _center_align_style(val):
     """Reusable center alignment function"""
     return 'text-align: center'
 
+def normalize_city_name(city):
+    """Normalize city name to standard form, especially for Port Said variations."""
+    if pd.isna(city) or not isinstance(city, str):
+        return city
+    
+    city_str = str(city).strip()
+    
+    # Handle Port Said variations (most common issue)
+    port_said_variations = ['portsaid', 'port said', 'port-said', 'port_said', 'port  said', 'PORT SAID', 'Portsaid']
+    city_normalized = city_str.lower().replace(' ', '').replace('-', '').replace('_', '')
+    if city_normalized == 'portsaid':
+        return 'Port Said'
+    
+    # Handle other cities - keep as is but normalize capitalization
+    city_mappings = {
+        'cairo': 'Cairo',
+        'assiut': 'Assiut',
+        'hurghada': 'Hurghada',
+        'minya': 'Minya',
+        'mansoura': 'Mansoura',
+        'damanhour': 'Damanhour',
+        'almahallahalkubra': 'Al Mahallah Al Kubra',
+        'al mahallah al kubra': 'Al Mahallah Al Kubra',
+        'al_mahallah_al_kubra': 'Al Mahallah Al Kubra',
+        'alexandria': 'Alexandria'
+    }
+    
+    normalized_lower = city_str.lower().strip()
+    if normalized_lower in city_mappings:
+        return city_mappings[normalized_lower]
+    
+    # Check for Port Said with spaces/dashes/underscores
+    if city_normalized == 'portsaid':
+        return 'Port Said'
+    
+    # Return title case for other cities
+    return city_str.title()
+
 def style_dataframe(df, percentage_cols=None, add_grand_total=False):
     """Apply professional styling to dataframes with blue headers and no borders."""
     if df.empty:
@@ -239,7 +277,7 @@ def display_unassigned_employees(employees_df: pd.DataFrame, shifts_df: pd.DataF
     if employees_df is None or employees_df.empty:
         st.warning("No employee data available to display unassigned employees.")
         return
-    
+
     # Handle case where shifts_df might be empty (no shifts uploaded yet)
     if shifts_df is None or shifts_df.empty:
         # If no shifts, all employees are unassigned
@@ -260,7 +298,7 @@ def display_unassigned_employees(employees_df: pd.DataFrame, shifts_df: pd.DataF
         
         st.subheader(f"Unassigned Employees for {selected_date}")
         st.info("No shift data uploaded yet. All employees are shown as unassigned.")
-        
+
         # Add city filter dropdown with unique key based on date
         cities = ['All Cities'] + sorted(unassigned_df['city'].unique().tolist())
         selected_city = st.selectbox(
@@ -549,6 +587,16 @@ def display_city_report(data, employee_data):
         if data is None or data.empty:
             st.warning("No data available for city report")
             return
+
+        # Normalize city names in employee_data to ensure consistency (especially Port Said)
+        employee_data = employee_data.copy()
+        if 'city' in employee_data.columns:
+            employee_data['city'] = employee_data['city'].apply(normalize_city_name)
+        
+        # Normalize city names in shift data as well
+        data = data.copy()
+        if 'city' in data.columns:
+            data['city'] = data['city'].apply(normalize_city_name)
 
         # Process data for city report
         city_data = DataSanitizer.generate_city_report(data, employee_data)
@@ -1264,6 +1312,11 @@ def main():
                         )
                         if employee_df is not None and not employee_df.empty:
                             employee_df.columns = [str(col).strip().lower().replace(' ', '_') for col in employee_df.columns]
+                            
+                            # Normalize city names to ensure Port Said and other cities are recognized correctly
+                            if 'city' in employee_df.columns:
+                                employee_df['city'] = employee_df['city'].apply(normalize_city_name)
+                            
                             st.session_state['employee_df'] = employee_df
                             st.session_state['employee_refresh'] = False
                             st.success(f"Successfully loaded {len(employee_df)} employee records from Google Sheets.")
