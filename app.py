@@ -105,17 +105,31 @@ st.markdown("""
         font-size: 48px;
         display: inline-block;
     }
+    .dashboard-title {
+        font-family: Arial, sans-serif;
+        font-weight: 900;
+        font-size: 54px;
+        line-height: 1.1;
+        letter-spacing: -0.5px;
+        white-space: nowrap;
+    }
+    .dashboard-title-blue {
+        color: #007BFF;
+    }
+    .dashboard-title-orange {
+        color: #FF5A00;
+    }
     /* Removed wobble animation for better performance */
 </style>
 """, unsafe_allow_html=True)
 
-# Display the 007 Team logo at the top
+# Display the dashboard title at the top
 col1, col2, col3 = st.columns([1, 2, 1])
 with col2:
     st.markdown("""
     <div class="logo-container">
-        <div class="logo-text" style="color: #007BFF;">007</div>
-        <div class="team-text">فريق</div>
+        <div class="dashboard-title dashboard-title-blue">داش بورد تحديث الشفتات</div>
+        <div class="dashboard-title dashboard-title-orange">- الوكيل</div>
     </div>
     """, unsafe_allow_html=True)
 
