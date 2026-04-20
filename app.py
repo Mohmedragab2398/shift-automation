@@ -6,12 +6,86 @@ from datetime import datetime, timedelta
 from data_sanitizer import DataSanitizer, validate_data
 from sheets_connector import SheetsConnector
 import logging
+from typing import Optional
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 st.set_page_config(page_title="داشب بورد الشفتات - الوكيل", layout="wide")
+
+def _get_app_password() -> str:
+    if "override_app_password" in st.session_state and st.session_state["override_app_password"]:
+        return str(st.session_state["override_app_password"])
+    pwd = st.secrets.get("app_password", "0000")
+    return str(pwd)
+
+def _get_admin_pin() -> Optional[str]:
+    admin_pin = st.secrets.get("admin_pin", None)
+    return str(admin_pin) if admin_pin is not None else None
+
+def _require_login():
+    """Gate the app behind a password before rendering the dashboard."""
+    if st.session_state.get("auth_ok", False):
+        return
+
+    st.markdown(
+        "<h2 style='text-align:center; margin: 10px 0 0 0;'>تسجيل الدخول</h2>",
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        "<p style='text-align:center; margin: 0 0 20px 0; color: #6b7280;'>أدخل كلمة المرور للوصول إلى لوحة التحكم</p>",
+        unsafe_allow_html=True,
+    )
+
+    with st.form("login_form", clear_on_submit=False):
+        entered = st.text_input("كلمة المرور", type="password")
+        submitted = st.form_submit_button("دخول")
+
+    if submitted:
+        if entered == _get_app_password():
+            st.session_state["auth_ok"] = True
+            st.rerun()
+        else:
+            st.error("كلمة المرور غير صحيحة")
+
+    st.stop()
+
+def _admin_panel():
+    """Admin-only panel to change the app password (requires admin_pin in secrets)."""
+    admin_pin = _get_admin_pin()
+    if not admin_pin:
+        return
+
+    with st.sidebar.expander("لوحة الإدارة", expanded=False):
+        st.caption("هذه اللوحة للأدمن فقط.")
+
+        if not st.session_state.get("admin_ok", False):
+            pin = st.text_input("Admin PIN", type="password", key="admin_pin_input")
+            if st.button("تفعيل وضع الأدمن"):
+                if pin == admin_pin:
+                    st.session_state["admin_ok"] = True
+                    st.success("تم تفعيل وضع الأدمن")
+                    st.rerun()
+                else:
+                    st.error("Admin PIN غير صحيح")
+            return
+
+        st.success("وضع الأدمن مفعّل")
+        st.info(
+            "لتغيير كلمة المرور بشكل دائم على Streamlit Cloud: حدّث قيمة `app_password` داخل Secrets."
+        )
+        new_pwd = st.text_input("كلمة مرور جديدة", type="password", key="new_app_pwd")
+        new_pwd2 = st.text_input("تأكيد كلمة المرور الجديدة", type="password", key="new_app_pwd2")
+        if st.button("تطبيق (لهذه الجلسة)"):
+            if not new_pwd:
+                st.error("برجاء إدخال كلمة مرور جديدة")
+                return
+            if new_pwd != new_pwd2:
+                st.error("كلمتا المرور غير متطابقتين")
+                return
+            st.session_state["override_app_password"] = new_pwd
+            st.success("تم تطبيق كلمة المرور الجديدة لهذه الجلسة")
 
 def apply_custom_table_styling():
     """Apply custom CSS styling for tables with blue headers and no borders."""
@@ -1325,6 +1399,8 @@ def display_contract_report(shift_df, employee_df):
         print(f"Error in contract report display: {str(e)}")
 
 def main():
+    _require_login()
+    _admin_panel()
     # Apply custom table styling for enhanced visual appearance
     apply_custom_table_styling()
 
