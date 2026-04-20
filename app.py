@@ -82,6 +82,11 @@ def apply_custom_table_styling():
 # Custom CSS for logo styling
 st.markdown("""
 <style>
+    /* Mobile-friendly defaults */
+    html, body, [class*="css"]  {
+        -webkit-text-size-adjust: 100%;
+    }
+
     .logo-container {
         display: flex;
         flex-direction: row;
@@ -89,6 +94,8 @@ st.markdown("""
         justify-content: center;
         margin-bottom: 30px;
         gap: 20px;
+        flex-wrap: wrap;
+        text-align: center;
     }
     .logo-text {
         color: #FF5A00;
@@ -108,10 +115,10 @@ st.markdown("""
     .dashboard-title {
         font-family: Arial, sans-serif;
         font-weight: 900;
-        font-size: 54px;
+        font-size: clamp(26px, 5vw, 54px);
         line-height: 1.1;
         letter-spacing: -0.5px;
-        white-space: nowrap;
+        white-space: normal;
     }
     .dashboard-title-blue {
         color: #007BFF;
@@ -119,7 +126,34 @@ st.markdown("""
     .dashboard-title-orange {
         color: #FF5A00;
     }
-    /* Removed wobble animation for better performance */
+    /* Make tables usable on small screens */
+    @media (max-width: 768px) {
+        .stDataFrame {
+            overflow-x: auto;
+        }
+        .stDataFrame table {
+            min-width: 700px !important;
+        }
+        .stDataFrame thead tr th {
+            font-size: 11px !important;
+            padding: 6px 4px !important;
+        }
+        .stDataFrame tbody tr td {
+            font-size: 12px !important;
+            padding: 8px 6px !important;
+        }
+    }
+
+    /* Header + spacing tweaks for phones */
+    @media (max-width: 480px) {
+        .logo-container {
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+        .dashboard-title {
+            font-size: clamp(20px, 6.5vw, 34px);
+        }
+    }
 </style>
 """, unsafe_allow_html=True)
 
