@@ -11,7 +11,7 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-st.set_page_config(page_title="Shift Management Dashboard", layout="wide")
+st.set_page_config(page_title="داشب بورد الشفتات - الوكيل", layout="wide")
 
 def apply_custom_table_styling():
     """Apply custom CSS styling for tables with blue headers and no borders."""
@@ -115,7 +115,7 @@ with col2:
     st.markdown("""
     <div class="logo-container">
         <div class="logo-text" style="color: #007BFF;">007</div>
-        <div class="team-text">Team</div>
+        <div class="team-text">فريق</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -164,7 +164,7 @@ def style_dataframe(df, percentage_cols=None, add_grand_total=False):
 
     # Performance optimization: Don't copy for large datasets
     if len(df) > 500:
-        st.warning(f"Large dataset ({len(df)} rows). Displaying without advanced styling for better performance.")
+        st.warning(f"البيانات كبيرة ({len(df)} صف). سيتم العرض بدون تنسيق متقدم لتحسين الأداء.")
         return df
 
     # Apply table styling with blue headers and no borders
@@ -224,7 +224,7 @@ def create_table_header(title, subtitle=None):
 
 def display_overview(employee_df, shift_df, contract_report_df, city_report_df):
     """Display overview with metrics and charts."""
-    st.header("Overview")
+    st.header("نظرة عامة")
 
     # Only consider valid shift statuses for assignment
     valid_statuses = ["EVALUATED", "PUBLISHED"]
@@ -238,39 +238,39 @@ def display_overview(employee_df, shift_df, contract_report_df, city_report_df):
     # Display overall metrics
     col1, col2, col3 = st.columns(3)
     with col1:
-        st.metric("Total Employees", total_employees)
+        st.metric("إجمالي الرايدرز", total_employees)
     with col2:
-        st.metric("Total Assigned", total_assigned)
+        st.metric("إجمالي المسندين", total_assigned)
     with col3:
-        st.metric("Overall Assignment Rate", f"{overall_percentage:.1f}%")
+        st.metric("معدل الإسناد الإجمالي", f"{overall_percentage:.1f}%")
 
     # Display contract-wise metrics
-    st.subheader("Contract-wise Distribution")
+    st.subheader("التوزيع حسب العقد")
     if not contract_report_df.empty:
         contract_fig = px.bar(
             contract_report_df,
             x='Contract',
             y=['Total', 'Assigned'],
             barmode='group',
-            title='Employee Distribution by Contract'
+            title='توزيع الرايدرز حسب العقد'
         )
         st.plotly_chart(contract_fig, use_container_width=True, key="overview_contract_chart")
 
     # Display city-wise metrics
-    st.subheader("City-wise Distribution")
+    st.subheader("التوزيع حسب المدينة")
     if not city_report_df.empty:
         city_fig = px.pie(
             city_report_df,
             values='Total',
             names='City',
-            title='Employee Distribution by City'
+            title='توزيع الرايدرز حسب المدينة'
         )
         st.plotly_chart(city_fig, use_container_width=True, key="overview_city_chart")
 
 def display_unassigned_employees(employees_df: pd.DataFrame, shifts_df: pd.DataFrame, selected_date: str):
     """Display employees who have no shifts assigned for the selected date."""
     if employees_df is None or employees_df.empty:
-        st.warning("No employee data available to display unassigned employees.")
+        st.warning("لا توجد بيانات رايدرز متاحة لعرض غير المسندين.")
         return
 
     # Handle case where shifts_df might be empty (no shifts uploaded yet)
@@ -285,27 +285,27 @@ def display_unassigned_employees(employees_df: pd.DataFrame, shifts_df: pd.DataF
         
         col1, col2, col3 = st.columns(3)
         with col1:
-            st.metric("Total Employees", total_employees)
+            st.metric("إجمالي الرايدرز", total_employees)
         with col2:
-            st.metric("Assigned", assigned_count)
+            st.metric("مسند", assigned_count)
         with col3:
-            st.metric("Unassigned", unassigned_count)
+            st.metric("غير مسند", unassigned_count)
         
-        st.subheader(f"Unassigned Employees for {selected_date}")
-        st.info("No shift data uploaded yet. All employees are shown as unassigned.")
+        st.subheader(f"الرايدرز غير المسندين بتاريخ {selected_date}")
+        st.info("لم يتم رفع بيانات شفتات بعد. سيتم عرض جميع الرايدرز على أنهم غير مسندين.")
 
         # Add city filter dropdown with unique key based on date
         # Normalize city names to ensure "Port Said" appears correctly
         city_list = unassigned_df['city'].dropna().astype(str).apply(normalize_city_name).unique().tolist()
-        cities = ['All Cities'] + sorted(city_list)
+        cities = ['كل المدن'] + sorted(city_list)
         selected_city = st.selectbox(
-            'Filter by City:',
+            'تصفية حسب المدينة:',
             cities,
             key=f"city_select_{selected_date}"
         )
         
         # Filter by selected city (normalize for comparison)
-        if selected_city != 'All Cities':
+        if selected_city != 'كل المدن':
             # Normalize city column for comparison
             unassigned_df_normalized = unassigned_df.copy()
             unassigned_df_normalized['city_normalized'] = unassigned_df_normalized['city'].astype(str).apply(normalize_city_name)
@@ -321,7 +321,7 @@ def display_unassigned_employees(employees_df: pd.DataFrame, shifts_df: pd.DataF
                 fig = px.pie(
                     values=city_counts.values,
                     names=city_counts.index,
-                    title='Unassigned Employees by City',
+                    title='الرايدرز غير المسندين حسب المدينة',
                     hole=0.4,
                     color_discrete_sequence=px.colors.qualitative.Bold
                 )
@@ -392,27 +392,27 @@ def display_unassigned_employees(employees_df: pd.DataFrame, shifts_df: pd.DataF
 
         col1, col2, col3 = st.columns(3)
         with col1:
-            st.metric("Total Employees", total_employees)
+            st.metric("إجمالي الرايدرز", total_employees)
         with col2:
-            st.metric("Assigned", assigned_count)
+            st.metric("مسند", assigned_count)
         with col3:
-            st.metric("Unassigned", unassigned_count)
+            st.metric("غير مسند", unassigned_count)
 
         if not unassigned_df.empty:
-            st.subheader(f"Unassigned Employees for {selected_date}")
+            st.subheader(f"الرايدرز غير المسندين بتاريخ {selected_date}")
 
             # Add city filter dropdown with unique key based on date
             # Normalize city names to ensure "Port Said" appears correctly
             city_list = unassigned_df['city'].dropna().astype(str).apply(normalize_city_name).unique().tolist()
-            cities = ['All Cities'] + sorted(city_list)
+            cities = ['كل المدن'] + sorted(city_list)
             selected_city = st.selectbox(
-                'Filter by City:',
+                'تصفية حسب المدينة:',
                 cities,
                 key=f"city_select_{selected_date}"
             )
 
             # Filter by selected city (normalize for comparison)
-            if selected_city != 'All Cities':
+            if selected_city != 'كل المدن':
                 # Normalize city column for comparison
                 unassigned_df_normalized = unassigned_df.copy()
                 unassigned_df_normalized['city_normalized'] = unassigned_df_normalized['city'].astype(str).apply(normalize_city_name)
@@ -428,7 +428,7 @@ def display_unassigned_employees(employees_df: pd.DataFrame, shifts_df: pd.DataF
                     fig = px.pie(
                         values=city_counts.values,
                         names=city_counts.index,
-                        title='Unassigned Employees by City',
+                        title='الرايدرز غير المسندين حسب المدينة',
                         hole=0.4,
                         color_discrete_sequence=px.colors.qualitative.Bold
                     )
@@ -451,10 +451,10 @@ def display_unassigned_employees(employees_df: pd.DataFrame, shifts_df: pd.DataF
             if not display_df.empty:
                 st.dataframe(display_df[display_columns], use_container_width=True, hide_index=True)
         else:
-            st.success(f"All employees are assigned shifts for {selected_date}")
+            st.success(f"جميع الرايدرز لديهم شفتات مسندة بتاريخ {selected_date}")
 
     except Exception as e:
-        st.error(f"Error displaying unassigned employees: {str(e)}")
+        st.error(f"خطأ أثناء عرض الرايدرز غير المسندين: {str(e)}")
         logger.error(f"Error in display_unassigned_employees: {str(e)}")
         import traceback
         logger.error(traceback.format_exc())
@@ -543,19 +543,19 @@ def display_supervisors_report(employees_df: pd.DataFrame, shifts_df: pd.DataFra
                     # Display metrics
                     col1, col2, col3, col4 = st.columns(4)
                     with col1:
-                        st.metric("Total Employees", total)
+                        st.metric("إجمالي الرايدرز", total)
                     with col2:
-                        st.metric("Assigned", assigned_count)
+                        st.metric("مسند", assigned_count)
                     with col3:
-                        st.metric("Unassigned", unassigned_count)
+                        st.metric("غير مسند", unassigned_count)
                     with col4:
-                        st.metric("Assignment Rate", f"{assignment_rate:.1f}%")
+                        st.metric("معدل الإسناد", f"{assignment_rate:.1f}%")
                     
                     # Create two columns for assigned and unassigned
                     col1, col2 = st.columns(2)
                     
                     with col1:
-                        st.markdown(f"#### ✅ Assigned Employees ({assigned_count})")
+                        st.markdown(f"#### ✅ الرايدرز المسندين ({assigned_count})")
                         if not assigned_employees.empty:
                             display_cols = ['employee_id', 'employee_name', 'city', 'contract_name']
                             display_cols = [col for col in display_cols if col in assigned_employees.columns]
@@ -565,10 +565,10 @@ def display_supervisors_report(employees_df: pd.DataFrame, shifts_df: pd.DataFra
                                 hide_index=True
                             )
                         else:
-                            st.info("No assigned employees for this date.")
+                            st.info("لا يوجد رايدرز مسندين لهذا التاريخ.")
                     
                     with col2:
-                        st.markdown(f"#### ❌ Unassigned Employees ({unassigned_count})")
+                        st.markdown(f"#### ❌ الرايدرز غير المسندين ({unassigned_count})")
                         if not unassigned_employees.empty:
                             display_cols = ['employee_id', 'employee_name', 'city', 'contract_name']
                             display_cols = [col for col in display_cols if col in unassigned_employees.columns]
@@ -578,12 +578,12 @@ def display_supervisors_report(employees_df: pd.DataFrame, shifts_df: pd.DataFra
                                 hide_index=True
                             )
                         else:
-                            st.success("All employees are assigned for this date.")
+                            st.success("جميع الرايدرز مسندين لهذا التاريخ.")
                     
                     st.markdown("---")  # Separator between dates
 
     except Exception as e:
-        st.error(f"Error displaying supervisors report: {str(e)}")
+        st.error(f"خطأ أثناء عرض تقرير المشرفين: {str(e)}")
         logger.error(f"Error in display_supervisors_report: {str(e)}")
         import traceback
         logger.error(traceback.format_exc())
@@ -592,13 +592,13 @@ def display_city_report(data, employee_data):
     """Display city-wise report with each city in its own tab, with tables and summary."""
     try:
         if data is None or data.empty:
-            st.warning("No data available for city report")
+            st.warning("لا توجد بيانات متاحة لتقرير المدن")
             return
 
         # Process data for city report
         city_data = DataSanitizer.generate_city_report(data, employee_data)
         if city_data.empty:
-            st.warning("No data available for city report after processing")
+            st.warning("لا توجد بيانات متاحة لتقرير المدن بعد المعالجة")
             return
 
         # Get unique cities and dates - normalize to ensure "Port Said" appears correctly
@@ -619,13 +619,13 @@ def display_city_report(data, employee_data):
                 assignment_rate = (assigned / total * 100) if total > 0 else 0
                 col1, col2, col3, col4 = st.columns(4)
                 with col1:
-                    st.metric("Total Employees", int(total))
+                    st.metric("إجمالي الرايدرز", int(total))
                 with col2:
-                    st.metric("Total Assigned", int(assigned))
+                    st.metric("إجمالي المسندين", int(assigned))
                 with col3:
-                    st.metric("Total Unassigned", int(unassigned))
+                    st.metric("إجمالي غير المسندين", int(unassigned))
                 with col4:
-                    st.metric("Overall Assignment Rate", f"{assignment_rate:.1f}%")
+                    st.metric("معدل الإسناد الإجمالي", f"{assignment_rate:.1f}%")
                 for date in dates:
                     date_str = pd.to_datetime(date).strftime('%d-%m')
                     date_data = city_data[city_data['Date'] == date]
@@ -647,7 +647,7 @@ def display_city_report(data, employee_data):
                         font-size: 14px;
                         display: inline-block;
                         border: 2px solid #1e40af;
-                    ">City: {city}</div>
+                    ">المدينة: {city}</div>
                     """, unsafe_allow_html=True)
 
                     st.markdown(f"""
@@ -661,7 +661,7 @@ def display_city_report(data, employee_data):
                         font-size: 14px;
                         display: inline-block;
                         border: 2px solid #1e40af;
-                    ">Date: {date_str}</div>
+                    ">التاريخ: {date_str}</div>
                     """, unsafe_allow_html=True)
 
                     # Use pandas styling with updated configuration
@@ -747,7 +747,7 @@ def display_city_report(data, employee_data):
                         if total_employees > 0:
                             # Create a donut chart showing Assigned vs Unassigned percentage
                             fig = go.Figure(data=[go.Pie(
-                                labels=['Assigned', 'Unassigned'],
+                                labels=['مسند', 'غير مسند'],
                                 values=[total_assigned, total_unassigned],
                                 hole=0.6,  # This creates the donut effect
                                 marker_colors=['#28a745', '#dc3545'],
@@ -760,9 +760,9 @@ def display_city_report(data, employee_data):
                             
                             # Add title and center text
                             fig.update_layout(
-                                title=f'Assignment Status in {city} on {date_str}',
+                                title=f'حالة الإسناد في {city} بتاريخ {date_str}',
                                 annotations=[dict(
-                                    text=f'<b>{assigned_percentage:.1f}%<br>Assigned</b>',
+                                    text=f'<b>{assigned_percentage:.1f}%<br>مسند</b>',
                                     x=0.5,
                                     y=0.5,
                                     font=dict(size=20),
@@ -783,7 +783,7 @@ def display_city_report(data, employee_data):
                             st.plotly_chart(fig, use_container_width=True, key=f"city_report_chart_{city}_{date_str}")
 
                 # Add Summary Table for All Dates (side by side)
-                st.markdown("### Summary View (All Dates)")
+                st.markdown("### ملخص (كل التواريخ)")
 
                 # Add dark blue headers for City and Date range
                 st.markdown(f"""
@@ -797,7 +797,7 @@ def display_city_report(data, employee_data):
                     font-size: 14px;
                     display: inline-block;
                     border: 2px solid #1e40af;
-                ">City: {city}</div>
+                ">المدينة: {city}</div>
                 """, unsafe_allow_html=True)
 
                 # Create date range string
@@ -813,7 +813,7 @@ def display_city_report(data, employee_data):
                     font-size: 14px;
                     display: inline-block;
                     border: 2px solid #1e40af;
-                ">Date: {date_range_str}</div>
+                ">الفترة: {date_range_str}</div>
                 """, unsafe_allow_html=True)
                 summary_data = []
                 contracts = sorted(employee_data[employee_data['city'] == city]['contract_name'].unique())
@@ -919,7 +919,7 @@ def display_city_report(data, employee_data):
                     st.dataframe(summary_styler, use_container_width=True, hide_index=True)
 
     except Exception as e:
-        st.error(f"Error in city report display: {str(e)}")
+        st.error(f"خطأ في عرض تقرير المدن: {str(e)}")
         print(f"Error in city report display: {str(e)}")
 
 def create_donut_chart(assigned, unassigned, title):
@@ -930,7 +930,7 @@ def create_donut_chart(assigned, unassigned, title):
 
     # Create donut chart
     fig = go.Figure(data=[go.Pie(
-        labels=['Assigned', 'Unassigned'],
+        labels=['مسند', 'غير مسند'],
         values=[assigned, unassigned],
         hole=0.6,
         marker_colors=['#28a745', '#dc3545']
@@ -939,7 +939,7 @@ def create_donut_chart(assigned, unassigned, title):
     # Add title and center text
     fig.update_layout(
         title=title,
-        annotations=[dict(text=f'{assigned}<br>Assigned', x=0.5, y=0.5, font_size=16, showarrow=False)],
+        annotations=[dict(text=f'{assigned}<br>مسند', x=0.5, y=0.5, font_size=16, showarrow=False)],
         showlegend=True,
         height=300,
         margin=dict(t=50, b=0, l=0, r=0)
@@ -949,11 +949,11 @@ def create_donut_chart(assigned, unassigned, title):
 
 def display_contract_report(shift_df, employee_df):
     """Display contract-wise report with each contract in its own tab, similar to city report"""
-    st.header("Contract Report")
+    st.header("تقرير العقود")
 
     try:
         if shift_df.empty or employee_df.empty:
-            st.warning("No data available for contract report")
+            st.warning("لا توجد بيانات متاحة لتقرير العقود")
             return
 
         # Get unique dates and contracts
@@ -983,13 +983,13 @@ def display_contract_report(shift_df, employee_df):
                 # Display overall metrics
                 col1, col2, col3, col4 = st.columns(4)
                 with col1:
-                    st.metric("Total Employees", int(total))
+                    st.metric("إجمالي الرايدرز", int(total))
                 with col2:
-                    st.metric("Total Assigned", int(assigned))
+                    st.metric("إجمالي المسندين", int(assigned))
                 with col3:
-                    st.metric("Total Unassigned", int(unassigned))
+                    st.metric("إجمالي غير المسندين", int(unassigned))
                 with col4:
-                    st.metric("Overall Assignment Rate", f"{assignment_rate:.1f}%")
+                    st.metric("معدل الإسناد الإجمالي", f"{assignment_rate:.1f}%")
 
                 # Per-day tables
                 for date in dates:
@@ -1010,7 +1010,7 @@ def display_contract_report(shift_df, employee_df):
                         font-size: 14px;
                         display: inline-block;
                         border: 2px solid #1e40af;
-                    ">Contract: {contract}</div>
+                    ">العقد: {contract}</div>
                     """, unsafe_allow_html=True)
 
                     st.markdown(f"""
@@ -1024,7 +1024,7 @@ def display_contract_report(shift_df, employee_df):
                         font-size: 14px;
                         display: inline-block;
                         border: 2px solid #1e40af;
-                    ">Date: {date_str}</div>
+                    ">التاريخ: {date_str}</div>
                     """, unsafe_allow_html=True)
 
                     # Group by city for this contract and date (normalize for comparison)
@@ -1137,7 +1137,7 @@ def display_contract_report(shift_df, employee_df):
                                     st.plotly_chart(donut_fig, use_container_width=True, key=f"contract_donut_{contract}_{date_str}")
 
                 # Add Summary Table for All Dates (side by side)
-                st.markdown("### Summary View (All Dates)")
+                st.markdown("### ملخص (كل التواريخ)")
 
                 # Add dark blue headers for Contract and Date range
                 st.markdown(f"""
@@ -1151,7 +1151,7 @@ def display_contract_report(shift_df, employee_df):
                     font-size: 14px;
                     display: inline-block;
                     border: 2px solid #1e40af;
-                ">Contract: {contract}</div>
+                ">العقد: {contract}</div>
                 """, unsafe_allow_html=True)
 
                 # Create date range string
@@ -1167,7 +1167,7 @@ def display_contract_report(shift_df, employee_df):
                     font-size: 14px;
                     display: inline-block;
                     border: 2px solid #1e40af;
-                ">Date: {date_range_str}</div>
+                ">الفترة: {date_range_str}</div>
                 """, unsafe_allow_html=True)
                 summary_data = []
                 cities = sorted(employee_df['city'].dropna().astype(str).apply(normalize_city_name).unique())
@@ -1273,7 +1273,7 @@ def display_contract_report(shift_df, employee_df):
                     st.dataframe(summary_styler, use_container_width=True, hide_index=True)
 
     except Exception as e:
-        st.error(f"Error in contract report display: {str(e)}")
+        st.error(f"خطأ في عرض تقرير العقود: {str(e)}")
         print(f"Error in contract report display: {str(e)}")
 
 def main():
@@ -1281,14 +1281,14 @@ def main():
     apply_custom_table_styling()
 
     workflow = st.sidebar.selectbox(
-        "Select Workflow",
-        ["Shifts Update"]
+        "اختر سير العمل",
+        ["تحديث الشفتات"]
     )
 
-    if workflow == "Shifts Update":
+    if workflow == "تحديث الشفتات":
         # --- Shifts Update workflow (untouched) ---
         st.markdown(
-            '<h1 style="text-align: center; margin: 20px 0;">Shift Management Dashboard</h1>',
+            '<h1 style="text-align: center; margin: 20px 0;">داشب بورد الشفتات - الوكيل</h1>',
             unsafe_allow_html=True
         )
         try:
@@ -1297,24 +1297,24 @@ def main():
             if 'sheets_connector' not in st.session_state:
                 st.session_state['sheets_connector'] = sheets_connector
         except Exception as e:
-            st.error(f"Error initializing Google Sheets: {str(e)}")
+            st.error(f"خطأ في تهيئة Google Sheets: {str(e)}")
             st.markdown("""
-            Please check:
-            1. The sheet is shared with: `sheet-accessa@shift-automation-458000.iam.gserviceaccount.com`
-            2. The sheet contains data in the 'all' tab
-            3. The sheet ID is correct in .streamlit/secrets.toml
-            4. You have enabled the Google Sheets API in your Google Cloud Console
+            برجاء التأكد من التالي:
+            1. تم مشاركة الشيت مع: `sheet-accessa@shift-automation-458000.iam.gserviceaccount.com`
+            2. الشيت يحتوي بيانات داخل تبويب `all`
+            3. رقم الـ Sheet ID صحيح داخل `.streamlit/secrets.toml`
+            4. تم تفعيل Google Sheets API داخل Google Cloud Console
             """)
             return
         col1, col2 = st.columns(2)
         with col1:
-            st.subheader("Employee Data (auto-loaded from Google Sheets)")
-            if st.button("Refresh Employee Data"):
+            st.subheader("بيانات الرايدرز (تحميل تلقائي من Google Sheets)")
+            if st.button("تحديث بيانات الرايدرز"):
                 st.session_state['employee_refresh'] = True
 
             employee_df = None
             if 'employee_df' not in st.session_state or st.session_state.get('employee_refresh', False):
-                with st.spinner("Loading employee data from Google Sheets..."):
+                with st.spinner("جاري تحميل بيانات الرايدرز من Google Sheets..."):
                     try:
                         employee_df = st.session_state.sheets_connector.read_sheet(
                             spreadsheet_id=SPREADSHEET_ID,
@@ -1324,14 +1324,14 @@ def main():
                             employee_df.columns = [str(col).strip().lower().replace(' ', '_') for col in employee_df.columns]
                             st.session_state['employee_df'] = employee_df
                             st.session_state['employee_refresh'] = False
-                            st.success(f"Successfully loaded {len(employee_df)} employee records from Google Sheets.")
+                            st.success(f"تم تحميل {len(employee_df)} سجل رايدر بنجاح من Google Sheets.")
                             try:
                                 # Optimize: Only show essential columns and limit display for large datasets
                                 essential_cols = ['employee_id', 'employee_name', 'contract_name', 'city', 'supervisors']
                                 display_cols = [col for col in essential_cols if col in employee_df.columns]
                                 
                                 if len(employee_df) > 500:
-                                    st.info(f"Large dataset ({len(employee_df)} records). Showing first 500 rows. Use filters to narrow down.")
+                                    st.info(f"البيانات كبيرة ({len(employee_df)} سجل). سيتم عرض أول 500 صف. استخدم الفلاتر للتضييق.")
                                     display_df = employee_df[display_cols].head(500).copy()
                                 else:
                                     display_df = employee_df[display_cols].copy()
@@ -1343,21 +1343,21 @@ def main():
                                     else:
                                         display_df[col] = display_df[col].fillna('').astype(str).str.strip()
                                 
-                                st.success(f"Displaying {len(display_df)} employee records.")
+                                st.success(f"يتم عرض {len(display_df)} سجل رايدر.")
                                 st.dataframe(display_df, use_container_width=True, hide_index=True)
                             except Exception as e:
-                                st.error(f"Error displaying employee data: {str(e)}")
-                                st.write("Data preview (simplified):")
+                                st.error(f"خطأ أثناء عرض بيانات الرايدرز: {str(e)}")
+                                st.write("معاينة مبسطة للبيانات:")
                                 st.write(display_df.head().to_dict())
                         else:
-                            st.error("No data was returned from Google Sheets. Please check:")
+                            st.error("لم يتم إرجاع أي بيانات من Google Sheets. برجاء التأكد من التالي:")
                             st.markdown("""
-                            1. The sheet is shared with: `sheet-accessa@shift-automation-458000.iam.gserviceaccount.com`
-                            2. The sheet contains data in the 'all' tab
-                            3. The sheet ID is correct
+                            1. تم مشاركة الشيت مع: `sheet-accessa@shift-automation-458000.iam.gserviceaccount.com`
+                            2. الشيت يحتوي بيانات داخل تبويب `all`
+                            3. رقم الـ Sheet ID صحيح
                             """)
                     except Exception as e:
-                        st.error(f"Error loading employee data: {str(e)}")
+                        st.error(f"خطأ أثناء تحميل بيانات الرايدرز: {str(e)}")
             else:
                 employee_df = st.session_state.get('employee_df', None)
                 if employee_df is not None and not employee_df.empty:
@@ -1367,7 +1367,7 @@ def main():
                         display_cols = [col for col in essential_cols if col in employee_df.columns]
                         
                         if len(employee_df) > 500:
-                            st.info(f"Large dataset ({len(employee_df)} records). Showing first 500 rows. Use filters to narrow down.")
+                            st.info(f"البيانات كبيرة ({len(employee_df)} سجل). سيتم عرض أول 500 صف. استخدم الفلاتر للتضييق.")
                             display_df = employee_df[display_cols].head(500).copy()
                         else:
                             display_df = employee_df[display_cols].copy()
@@ -1379,74 +1379,74 @@ def main():
                             else:
                                 display_df[col] = display_df[col].fillna('').astype(str).str.strip()
                         
-                        st.success(f"Displaying {len(display_df)} employee records.")
+                        st.success(f"يتم عرض {len(display_df)} سجل رايدر.")
                         st.dataframe(display_df, use_container_width=True, hide_index=True)
                     except Exception as e:
-                        st.error(f"Error displaying employee data: {str(e)}")
-                        st.write("Data preview (simplified):")
+                        st.error(f"خطأ أثناء عرض بيانات الرايدرز: {str(e)}")
+                        st.write("معاينة مبسطة للبيانات:")
                         st.write(display_df.head().to_dict())
         with col2:
-            st.subheader("Upload City Files")
+            st.subheader("رفع ملفات المدن")
             st.markdown(
                 '<div class="file-upload-info">'
-                'Upload city-specific CSV files containing shift information<br>'
-                'Required columns: Employee ID, Employee Name, Contract Name, Shift Status, '
+                'ارفع ملفات CSV الخاصة بكل مدينة والتي تحتوي على بيانات الشفتات<br>'
+                'الأعمدة المطلوبة: Employee ID, Employee Name, Contract Name, Shift Status, '
                 'Planned Start/End Date, Planned Start/End Time'
                 '</div>',
                 unsafe_allow_html=True
             )
             city_files = st.file_uploader(
-                "Upload city files (CSV)",
+                "ارفع ملفات المدن (CSV)",
                 type=['csv'],
                 accept_multiple_files=True,
                 key="city_files"
             )
 
         if not city_files:
-            st.warning("⚠️ Please upload at least one city file")
+            st.warning("⚠️ برجاء رفع ملف مدينة واحد على الأقل")
             return
 
         try:
-            with st.spinner("Processing city files..."):
+            with st.spinner("جاري معالجة ملفات المدن..."):
                 merged_shifts = DataSanitizer.merge_shift_files(city_files)
                 if merged_shifts is None or merged_shifts.empty:
-                    st.error("No valid data found in city files")
+                    st.error("لا توجد بيانات صالحة داخل ملفات المدن")
                     return
                 merged_shifts.columns = merged_shifts.columns.str.strip().str.lower().str.replace(' ', '_')
                 validate_data(merged_shifts, 'shift_file')
-                st.success(f"✅ Successfully processed {len(city_files)} city files")
+                st.success(f"✅ تم معالجة {len(city_files)} ملف مدينة بنجاح")
 
             min_date = merged_shifts['planned_start_date'].min()
             max_date = merged_shifts['planned_start_date'].max()
-            st.markdown("### Select Date Range")
+            st.markdown("### اختيار نطاق التاريخ")
             st.markdown(
                 f'<div class="file-upload-info">'
-                f'Available dates: {min_date} to {max_date}'
+                f'التواريخ المتاحة: {min_date} إلى {max_date}'
                 '</div>',
                 unsafe_allow_html=True
             )
             selected_dates = st.date_input(
-                "Select dates to analyze",
+                "اختر التواريخ للتحليل",
                 value=(min_date, min(max_date, min_date + timedelta(days=6))),
                 min_value=min_date,
                 max_value=max_date
             )
             if len(selected_dates) != 2:
-                st.warning("Please select both start and end dates")
+                st.warning("برجاء اختيار تاريخ البداية وتاريخ النهاية")
                 return
 
             date_range = pd.date_range(selected_dates[0], selected_dates[1])
             filtered_shifts = DataSanitizer.filter_by_dates(merged_shifts, date_range)
             if filtered_shifts is None:
-                st.error("No data found for selected dates")
+                st.error("لا توجد بيانات للتواريخ المختارة")
                 return
 
             tab1, tab2, tab3, tab4, tab5 = st.tabs([
-                "Overview",
-                "Unassigned Employees",
-                "Contract Report",
-                "City Report",
-                "Supervisors"
+                "نظرة عامة",
+                "الرايدرز غير المسندين",
+                "تقرير العقود",
+                "تقرير المدن",
+                "المشرفون"
             ])
 
             with tab1:
@@ -1461,7 +1461,7 @@ def main():
             with tab2:
                 # Optimize: Process dates more efficiently
                 if len(date_range) > 7:
-                    st.info(f"Showing data for {len(date_range)} dates. This may take a moment...")
+                    st.info(f"يتم عرض بيانات {len(date_range)} يوم. قد يستغرق ذلك بعض الوقت...")
                 
                 for date in date_range:
                     date_key = date.date() if hasattr(date, 'date') else date
@@ -1478,7 +1478,7 @@ def main():
                 display_supervisors_report(employee_df, filtered_shifts_df, date_range)
 
         except Exception as e:
-            st.error(f"An error occurred: {str(e)}")
+            st.error(f"حدث خطأ: {str(e)}")
 
 if __name__ == "__main__":
     main()

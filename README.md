@@ -1,71 +1,71 @@
-# Shift Management Dashboard
+# داشب بورد الشفتات - الوكيل
 
-A streamlined dashboard for managing employee shifts, built with Streamlit and Google Sheets integration.
+لوحة تحكم مبسطة لإدارة الشفتات الخاصة بالرايدرز، مبنية باستخدام Streamlit ومتكاملة مع Google Sheets.
 
 ![Talabat ESM Team](talabat_logo_wobble.gif)
 
-## Features
+## المميزات
 
-- 📊 Real-time data synchronization with Google Sheets
-- 📅 Daily shift management and overview
-- 🏢 Contract-wise and city-wise reports
-- 📈 Assignment rate tracking
-- 🔄 Automatic data refresh
-- 📱 Responsive design
+- 📊 مزامنة فورية للبيانات مع Google Sheets
+- 📅 إدارة الشفتات اليومية ونظرة عامة
+- 🏢 تقارير حسب العقد وحسب المدينة
+- 📈 تتبّع معدل الإسناد
+- 🔄 تحديث تلقائي للبيانات
+- 📱 تصميم متجاوب
 
-## Setup Instructions for New Users
+## خطوات الإعداد للمستخدمين الجدد
 
-### 1. Install Required Software
+### 1. تثبيت البرامج المطلوبة
 
-1. Download and install Python from [python.org](https://www.python.org/downloads/)
-   - During installation, make sure to check "Add Python to PATH"
-   - Click "Install Now" with recommended options
+1. حمّل وثبّت Python من [python.org](https://www.python.org/downloads/)
+   - أثناء التثبيت تأكد من تفعيل خيار "Add Python to PATH"
+   - اضغط "Install Now" بالإعدادات الافتراضية
 
-2. Download and install Git from [git-scm.com](https://git-scm.com/downloads)
-   - Use default installation options
+2. حمّل وثبّت Git من [git-scm.com](https://git-scm.com/downloads)
+   - استخدم إعدادات التثبيت الافتراضية
 
-3. Download and install GitHub Desktop from [desktop.github.com](https://desktop.github.com/)
-   - This provides an easy-to-use interface for managing the project
+3. حمّل وثبّت GitHub Desktop من [desktop.github.com](https://desktop.github.com/)
+   - يوفر واجهة سهلة لإدارة المشروع
 
-### 2. Get the Project
+### 2. الحصول على المشروع
 
-1. Open GitHub Desktop
-2. Click on "File" → "Clone Repository"
-3. Enter URL: `https://github.com/Mohmedragab2398/shift-automation`
-4. Choose where to save it on your computer
-5. Click "Clone"
+1. افتح GitHub Desktop
+2. اختر "File" → "Clone Repository"
+3. أدخل الرابط: `https://github.com/Mohmedragab2398/shift-automation`
+4. اختر مكان حفظ المشروع على جهازك
+5. اضغط "Clone"
 
-### 3. Set Up the Project
+### 3. إعداد المشروع
 
-1. Open Command Prompt (Windows):
-   - Press Win + R
-   - Type "cmd" and press Enter
+1. افتح موجه الأوامر في ويندوز:
+   - اضغط Win + R
+   - اكتب "cmd" ثم Enter
 
-2. Navigate to project folder:
+2. انتقل إلى مجلد المشروع:
    ```bash
    cd path/to/your/project
    ```
 
-3. Create virtual environment:
+3. إنشاء بيئة افتراضية:
    ```bash
    python -m venv venv
    ```
 
-4. Activate virtual environment:
+4. تفعيل البيئة الافتراضية:
    ```bash
    venv\Scripts\activate
    ```
 
-5. Install requirements:
+5. تثبيت المتطلبات:
 ```bash
 pip install -r requirements.txt
 ```
 
-### 4. Configure Google Sheets Access
+### 4. إعداد الوصول إلى Google Sheets
 
-1. Create `.streamlit` folder in project directory (if not exists)
-2. Create `secrets.toml` file inside `.streamlit` folder
-3. Add your Google Sheets credentials:
+1. أنشئ مجلد `.streamlit` داخل المشروع (إذا لم يكن موجودًا)
+2. أنشئ ملف `secrets.toml` داخل مجلد `.streamlit`
+3. أضف بيانات اعتماد Google Sheets:
    ```toml
    [gcp_service_account]
    type = "service_account"
@@ -83,26 +83,26 @@ pip install -r requirements.txt
    spreadsheet_id = "your-spreadsheet-id"
    ```
 
-### 5. Run the Application
+### 5. تشغيل التطبيق
 
-1. In Command Prompt (with venv activated):
+1. داخل موجه الأوامر (بعد تفعيل venv):
 ```bash
 streamlit run app.py
 ```
 
-2. The dashboard will open in your default web browser
+2. ستفتح لوحة التحكم في المتصفح الافتراضي
 
-## Usage Guide
+## دليل الاستخدام
 
-### Employee Data Management
+### إدارة بيانات الرايدرز
 
-1. Employee data is automatically loaded from Google Sheets
-2. Click "Refresh Employee Data" to update the data
-3. The sheet must be shared with the service account email
+1. يتم تحميل بيانات الرايدرز تلقائيًا من Google Sheets
+2. اضغط "تحديث بيانات الرايدرز" لتحديث البيانات
+3. يجب مشاركة الشيت مع بريد حساب الخدمة (Service Account)
 
-### City Files Upload
+### رفع ملفات المدن
 
-1. Prepare CSV files with required columns:
+1. جهّز ملفات CSV بالأعمدة المطلوبة:
    - Employee ID
    - Employee Name
    - Contract Name
@@ -110,36 +110,35 @@ streamlit run app.py
    - Planned Start/End Date
    - Planned Start/End Time
 
-2. Upload files using the "Upload City Files" section
+2. ارفع الملفات من قسم "رفع ملفات المدن"
 
-### Reports and Analysis
+### التقارير والتحليل
 
-- **Overview**: Shows total metrics and distributions
-- **Daily Shifts**: Detailed view of shifts for each date
-- **Unassigned Employees**: Lists employees without shifts
-- **Contract Report**: Analysis by contract
-- **City Report**: Analysis by city
+- **نظرة عامة**: إجماليات وتوزيعات
+- **الرايدرز غير المسندين**: قائمة بالرايدرز بدون شفتات
+- **تقرير العقود**: تحليل حسب العقد
+- **تقرير المدن**: تحليل حسب المدينة
 
-## Troubleshooting
+## حل المشاكل
 
-If you encounter any issues:
+إذا واجهتك أي مشكلة:
 
-1. Make sure Python and all requirements are installed
-2. Check Google Sheets credentials and permissions
-3. Verify CSV file format matches requirements
-4. Try refreshing the page or restarting the application
+1. تأكد من تثبيت Python وكل المتطلبات
+2. راجع بيانات اعتماد Google Sheets والصلاحيات
+3. تأكد أن صيغة CSV مطابقة للمتطلبات
+4. جرّب تحديث الصفحة أو إعادة تشغيل التطبيق
 
-## Support
+## الدعم
 
-For help or questions, contact:
+للمساعدة أو الاستفسارات تواصل مع:
 - Mohamed Ragab (Project Lead)
 
-## Updates
+## التحديثات
 
-To get the latest updates:
-1. Open GitHub Desktop
-2. Click "Fetch origin"
-3. Click "Pull origin" if updates are available
+للحصول على آخر التحديثات:
+1. افتح GitHub Desktop
+2. اضغط "Fetch origin"
+3. اضغط "Pull origin" إذا كانت هناك تحديثات
 
 # Data Sanitization Module
 
