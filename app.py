@@ -1301,10 +1301,6 @@ def main():
 
     if workflow == "تحديث الشفتات":
         # --- Shifts Update workflow (untouched) ---
-        st.markdown(
-            '<h1 style="text-align: center; margin: 20px 0;">داشب بورد الشفتات - الوكيل</h1>',
-            unsafe_allow_html=True
-        )
         try:
             sheets_connector = SheetsConnector()
             SPREADSHEET_ID = st.secrets["spreadsheet_id"]
