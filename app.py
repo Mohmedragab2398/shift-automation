@@ -755,7 +755,7 @@ def display_unassigned_employees(employees_df: pd.DataFrame, shifts_df: pd.DataF
             if not display_df.empty:
                 st.dataframe(display_df[display_columns], use_container_width=True, hide_index=True)
         else:
-        st.success(f"جميع الرايدرز لديهم شفتات محجوزة بتاريخ {selected_date}")
+            st.success(f"جميع الرايدرز لديهم شفتات محجوزة بتاريخ {selected_date}")
 
     except Exception as e:
         st.error(f"خطأ أثناء عرض الرايدرز غير المسندين: {str(e)}")
