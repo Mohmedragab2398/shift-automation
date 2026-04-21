@@ -544,7 +544,7 @@ def display_overview(employee_df, shift_df, contract_report_df, city_report_df):
     with col1:
         st.metric("إجمالي الرايدرز", total_employees)
     with col2:
-        st.metric("إجمالي المسندين", total_assigned)
+        st.metric("إجمالي الحاجزين", total_assigned)
     with col3:
         st.metric("معدل الإسناد الإجمالي", f"{overall_percentage:.1f}%")
 
@@ -591,7 +591,7 @@ def display_unassigned_employees(employees_df: pd.DataFrame, shifts_df: pd.DataF
         with col1:
             st.metric("إجمالي الرايدرز", total_employees)
         with col2:
-            st.metric("مسند", assigned_count)
+            st.metric("حاجز", assigned_count)
         with col3:
             st.metric("غير مسند", unassigned_count)
         
@@ -698,7 +698,7 @@ def display_unassigned_employees(employees_df: pd.DataFrame, shifts_df: pd.DataF
         with col1:
             st.metric("إجمالي الرايدرز", total_employees)
         with col2:
-            st.metric("مسند", assigned_count)
+            st.metric("حاجز", assigned_count)
         with col3:
             st.metric("غير مسند", unassigned_count)
 
@@ -755,7 +755,7 @@ def display_unassigned_employees(employees_df: pd.DataFrame, shifts_df: pd.DataF
             if not display_df.empty:
                 st.dataframe(display_df[display_columns], use_container_width=True, hide_index=True)
         else:
-            st.success(f"جميع الرايدرز لديهم شفتات مسندة بتاريخ {selected_date}")
+        st.success(f"جميع الرايدرز لديهم شفتات محجوزة بتاريخ {selected_date}")
 
     except Exception as e:
         st.error(f"خطأ أثناء عرض الرايدرز غير المسندين: {str(e)}")
@@ -849,7 +849,7 @@ def display_supervisors_report(employees_df: pd.DataFrame, shifts_df: pd.DataFra
                     with col1:
                         st.metric("إجمالي الرايدرز", total)
                     with col2:
-                        st.metric("مسند", assigned_count)
+                        st.metric("حاجز", assigned_count)
                     with col3:
                         st.metric("غير مسند", unassigned_count)
                     with col4:
@@ -859,7 +859,7 @@ def display_supervisors_report(employees_df: pd.DataFrame, shifts_df: pd.DataFra
                     col1, col2 = st.columns(2)
                     
                     with col1:
-                        st.markdown(f"#### ✅ الرايدرز المسندين ({assigned_count})")
+                        st.markdown(f"#### ✅ الرايدرز الحاجزين ({assigned_count})")
                         if not assigned_employees.empty:
                             display_cols = ['employee_id', 'employee_name', 'city', 'contract_name']
                             display_cols = [col for col in display_cols if col in assigned_employees.columns]
@@ -869,7 +869,7 @@ def display_supervisors_report(employees_df: pd.DataFrame, shifts_df: pd.DataFra
                                 hide_index=True
                             )
                         else:
-                            st.info("لا يوجد رايدرز مسندين لهذا التاريخ.")
+                            st.info("لا يوجد رايدرز حاجزين لهذا التاريخ.")
                     
                     with col2:
                         st.markdown(f"#### ❌ الرايدرز غير المسندين ({unassigned_count})")
@@ -882,7 +882,7 @@ def display_supervisors_report(employees_df: pd.DataFrame, shifts_df: pd.DataFra
                                 hide_index=True
                             )
                         else:
-                            st.success("جميع الرايدرز مسندين لهذا التاريخ.")
+                            st.success("جميع الرايدرز حاجزين لهذا التاريخ.")
                     
                     st.markdown("---")  # Separator between dates
 
@@ -925,7 +925,7 @@ def display_city_report(data, employee_data):
                 with col1:
                     st.metric("إجمالي الرايدرز", int(total))
                 with col2:
-                    st.metric("إجمالي المسندين", int(assigned))
+                    st.metric("إجمالي الحاجزين", int(assigned))
                 with col3:
                     st.metric("إجمالي غير المسندين", int(unassigned))
                 with col4:
@@ -1051,7 +1051,7 @@ def display_city_report(data, employee_data):
                         if total_employees > 0:
                             # Create a donut chart showing Assigned vs Unassigned percentage
                             fig = go.Figure(data=[go.Pie(
-                                labels=['مسند', 'غير مسند'],
+                                labels=['حاجز', 'غير مسند'],
                                 values=[total_assigned, total_unassigned],
                                 hole=0.6,  # This creates the donut effect
                                 marker_colors=['#28a745', '#dc3545'],
@@ -1066,7 +1066,7 @@ def display_city_report(data, employee_data):
                             fig.update_layout(
                                 title=f'حالة الإسناد في {city} بتاريخ {date_str}',
                                 annotations=[dict(
-                                    text=f'<b>{assigned_percentage:.1f}%<br>مسند</b>',
+                                    text=f'<b>{assigned_percentage:.1f}%<br>حاجز</b>',
                                     x=0.5,
                                     y=0.5,
                                     font=dict(size=20),
@@ -1234,7 +1234,7 @@ def create_donut_chart(assigned, unassigned, title):
 
     # Create donut chart
     fig = go.Figure(data=[go.Pie(
-        labels=['مسند', 'غير مسند'],
+        labels=['حاجز', 'غير مسند'],
         values=[assigned, unassigned],
         hole=0.6,
         marker_colors=['#28a745', '#dc3545']
@@ -1243,7 +1243,7 @@ def create_donut_chart(assigned, unassigned, title):
     # Add title and center text
     fig.update_layout(
         title=title,
-        annotations=[dict(text=f'{assigned}<br>مسند', x=0.5, y=0.5, font_size=16, showarrow=False)],
+        annotations=[dict(text=f'{assigned}<br>حاجز', x=0.5, y=0.5, font_size=16, showarrow=False)],
         showlegend=True,
         height=300,
         margin=dict(t=50, b=0, l=0, r=0)
@@ -1289,7 +1289,7 @@ def display_contract_report(shift_df, employee_df):
                 with col1:
                     st.metric("إجمالي الرايدرز", int(total))
                 with col2:
-                    st.metric("إجمالي المسندين", int(assigned))
+                    st.metric("إجمالي الحاجزين", int(assigned))
                 with col3:
                     st.metric("إجمالي غير المسندين", int(unassigned))
                 with col4:
@@ -1749,10 +1749,9 @@ def main():
                 st.error("لا توجد بيانات للتواريخ المختارة")
                 return
 
-            tab1, tab2, tab3, tab4, tab5 = st.tabs([
+            tab1, tab2, tab4, tab5 = st.tabs([
                 "نظرة عامة",
                 "الرايدرز غير المسندين",
-                "تقرير العقود",
                 "تقرير المدن",
                 "المشرفون"
             ])
@@ -1778,10 +1777,6 @@ def main():
                     date_shifts = filtered_shifts.get(date_key, pd.DataFrame())
                     _, date_shifts_filtered = _filter_for_user(employee_df_filtered, date_shifts)
                     display_unassigned_employees(employee_df_filtered, date_shifts_filtered, date_key)
-
-            with tab3:
-                employee_df_filtered, shifts_df_filtered = _filter_for_user(employee_df, filtered_shifts_df)
-                display_contract_report(shifts_df_filtered, employee_df_filtered)
 
             with tab4:
                 employee_df_filtered, shifts_df_filtered = _filter_for_user(employee_df, filtered_shifts_df)
