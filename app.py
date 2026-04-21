@@ -7,6 +7,11 @@ from data_sanitizer import DataSanitizer, validate_data
 from sheets_connector import SheetsConnector
 import logging
 from typing import Optional
+import hashlib
+import hmac
+import os
+import base64
+import gspread
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -14,78 +19,255 @@ logger = logging.getLogger(__name__)
 
 st.set_page_config(page_title="داشب بورد الشفتات - الوكيل", layout="wide")
 
-def _get_app_password() -> str:
-    if "override_app_password" in st.session_state and st.session_state["override_app_password"]:
-        return str(st.session_state["override_app_password"])
-    pwd = st.secrets.get("app_password", "0000")
-    return str(pwd)
+USERS_SHEET_TITLE = "users"
+PBKDF2_ITERATIONS = 210_000
 
-def _get_admin_pin() -> Optional[str]:
-    admin_pin = st.secrets.get("admin_pin", None)
-    return str(admin_pin) if admin_pin is not None else None
+def _pbkdf2_hash(password: str, salt: bytes, iterations: int = PBKDF2_ITERATIONS) -> bytes:
+    return hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, iterations)
 
-def _require_login():
-    """Gate the app behind a password before rendering the dashboard."""
-    if st.session_state.get("auth_ok", False):
+def _encode_pwd_hash(password: str) -> str:
+    salt = os.urandom(16)
+    dk = _pbkdf2_hash(password, salt)
+    return "pbkdf2_sha256${}${}${}".format(
+        PBKDF2_ITERATIONS,
+        base64.urlsafe_b64encode(salt).decode("ascii").rstrip("="),
+        base64.urlsafe_b64encode(dk).decode("ascii").rstrip("="),
+    )
+
+def _verify_pwd_hash(password: str, encoded: str) -> bool:
+    try:
+        algo, iters_str, salt_b64, dk_b64 = encoded.split("$", 3)
+        if algo != "pbkdf2_sha256":
+            return False
+        iterations = int(iters_str)
+        salt = base64.urlsafe_b64decode(salt_b64 + "==")
+        expected = base64.urlsafe_b64decode(dk_b64 + "==")
+        actual = _pbkdf2_hash(password, salt, iterations)
+        return hmac.compare_digest(actual, expected)
+    except Exception:
+        return False
+
+def _ensure_users_worksheet(connector: SheetsConnector, spreadsheet_id: str):
+    sheet = connector.gspread_client.open_by_key(spreadsheet_id)
+    try:
+        _ = sheet.worksheet(USERS_SHEET_TITLE)
+    except gspread.exceptions.WorksheetNotFound:
+        sheet.add_worksheet(title=USERS_SHEET_TITLE, rows=200, cols=8)
+        ws = sheet.worksheet(USERS_SHEET_TITLE)
+        ws.update("A1:E1", [["username", "password_hash", "role", "supervisor_name", "active"]])
+
+def _load_users(connector: SheetsConnector, spreadsheet_id: str) -> pd.DataFrame:
+    _ensure_users_worksheet(connector, spreadsheet_id)
+    sheet = connector.gspread_client.open_by_key(spreadsheet_id)
+    ws = sheet.worksheet(USERS_SHEET_TITLE)
+    values = ws.get_all_values()
+    if not values or len(values) < 2:
+        return pd.DataFrame(columns=["username", "password_hash", "role", "supervisor_name", "active"])
+    header = [str(x).strip().lower() for x in values[0]]
+    rows = values[1:]
+    df = pd.DataFrame(rows, columns=header)
+    # Normalize
+    for col in ["username", "password_hash", "role", "supervisor_name", "active"]:
+        if col not in df.columns:
+            df[col] = ""
+    df["username"] = df["username"].astype(str).str.strip()
+    df["role"] = df["role"].astype(str).str.strip().str.lower()
+    df["supervisor_name"] = df["supervisor_name"].astype(str).str.strip()
+    df["active"] = df["active"].astype(str).str.strip().str.lower().replace({"": "true"})
+    return df[["username", "password_hash", "role", "supervisor_name", "active"]]
+
+def _save_users(connector: SheetsConnector, spreadsheet_id: str, users_df: pd.DataFrame):
+    _ensure_users_worksheet(connector, spreadsheet_id)
+    users_df = users_df.copy()
+    cols = ["username", "password_hash", "role", "supervisor_name", "active"]
+    for c in cols:
+        if c not in users_df.columns:
+            users_df[c] = ""
+    users_df = users_df[cols]
+    users_df = users_df.fillna("")
+    sheet = connector.gspread_client.open_by_key(spreadsheet_id)
+    ws = sheet.worksheet(USERS_SHEET_TITLE)
+    ws.clear()
+    ws.update("A1:E1", [cols])
+    if not users_df.empty:
+        ws.update(f"A2:E{len(users_df)+1}", users_df.values.tolist())
+
+def _bootstrap_admin_if_missing(connector: SheetsConnector, spreadsheet_id: str) -> pd.DataFrame:
+    users_df = _load_users(connector, spreadsheet_id)
+    admin_username = str(st.secrets.get("admin_username", "admin")).strip()
+    admin_password = str(st.secrets.get("admin_password", "0000")).strip()
+    existing_admin = users_df[(users_df["username"] == admin_username) & (users_df["role"] == "admin")]
+    if existing_admin.empty:
+        new_row = {
+            "username": admin_username,
+            "password_hash": _encode_pwd_hash(admin_password),
+            "role": "admin",
+            "supervisor_name": "",
+            "active": "true",
+        }
+        users_df = pd.concat([users_df, pd.DataFrame([new_row])], ignore_index=True)
+        _save_users(connector, spreadsheet_id, users_df)
+    return users_df
+
+def _login_screen(connector: SheetsConnector, spreadsheet_id: str):
+    if st.session_state.get("user"):
         return
 
+    users_df = _bootstrap_admin_if_missing(connector, spreadsheet_id)
+
+    st.markdown("<h2 style='text-align:center; margin: 10px 0 0 0;'>تسجيل الدخول</h2>", unsafe_allow_html=True)
     st.markdown(
-        "<h2 style='text-align:center; margin: 10px 0 0 0;'>تسجيل الدخول</h2>",
-        unsafe_allow_html=True,
-    )
-    st.markdown(
-        "<p style='text-align:center; margin: 0 0 20px 0; color: #6b7280;'>أدخل كلمة المرور للوصول إلى لوحة التحكم</p>",
+        "<p style='text-align:center; margin: 0 0 20px 0; color: #6b7280;'>أدخل اسم المستخدم وكلمة المرور</p>",
         unsafe_allow_html=True,
     )
 
-    with st.form("login_form", clear_on_submit=False):
-        entered = st.text_input("كلمة المرور", type="password")
+    with st.form("login_form_users", clear_on_submit=False):
+        username = st.text_input("اسم المستخدم")
+        password = st.text_input("كلمة المرور", type="password")
         submitted = st.form_submit_button("دخول")
 
     if submitted:
-        if entered == _get_app_password():
-            st.session_state["auth_ok"] = True
-            st.rerun()
+        u = str(username).strip()
+        row = users_df[users_df["username"] == u]
+        if row.empty:
+            st.error("بيانات الدخول غير صحيحة")
         else:
-            st.error("كلمة المرور غير صحيحة")
+            r = row.iloc[0].to_dict()
+            if str(r.get("active", "true")).lower() not in ("true", "1", "yes", "y"):
+                st.error("هذا الحساب غير مُفعّل")
+            elif not _verify_pwd_hash(str(password), str(r.get("password_hash", ""))):
+                st.error("بيانات الدخول غير صحيحة")
+            else:
+                st.session_state["user"] = {
+                    "username": r.get("username", ""),
+                    "role": r.get("role", "supervisor"),
+                    "supervisor_name": r.get("supervisor_name", ""),
+                }
+                st.rerun()
 
     st.stop()
 
-def _admin_panel():
-    """Admin-only panel to change the app password (requires admin_pin in secrets)."""
-    admin_pin = _get_admin_pin()
-    if not admin_pin:
+def _admin_users_panel(connector: SheetsConnector, spreadsheet_id: str):
+    user = st.session_state.get("user") or {}
+    if user.get("role") != "admin":
         return
 
-    with st.sidebar.expander("لوحة الإدارة", expanded=False):
-        st.caption("هذه اللوحة للأدمن فقط.")
+    with st.sidebar.expander("إدارة المستخدمين", expanded=False):
+        users_df = _load_users(connector, spreadsheet_id)
+        st.caption("يتم تخزين المستخدمين داخل تبويب `users` في Google Sheet.")
 
-        if not st.session_state.get("admin_ok", False):
-            pin = st.text_input("Admin PIN", type="password", key="admin_pin_input")
-            if st.button("تفعيل وضع الأدمن"):
-                if pin == admin_pin:
-                    st.session_state["admin_ok"] = True
-                    st.success("تم تفعيل وضع الأدمن")
+        st.markdown("**المستخدمون الحاليون**")
+        st.dataframe(users_df[["username", "role", "supervisor_name", "active"]], use_container_width=True, hide_index=True)
+
+        st.markdown("---")
+        st.markdown("**إضافة/تحديث مستخدم**")
+        with st.form("admin_add_user"):
+            new_username = st.text_input("Username", key="adm_new_username")
+            new_role = st.selectbox("Role", ["supervisor", "admin"], key="adm_new_role")
+            supervisor_name = st.text_input("Supervisor name (مطابق لعمود E)", key="adm_supervisor_name")
+            new_password = st.text_input("Password", type="password", key="adm_new_password")
+            active = st.selectbox("Active", ["true", "false"], key="adm_active")
+            save_btn = st.form_submit_button("حفظ")
+
+        if save_btn:
+            u = str(new_username).strip()
+            if not u:
+                st.error("Username مطلوب")
+                return
+            if new_role == "supervisor" and not str(supervisor_name).strip():
+                st.error("Supervisor name مطلوب للمشرف")
+                return
+
+            users_df = users_df.copy()
+            exists_idx = users_df.index[users_df["username"] == u].tolist()
+            row = {
+                "username": u,
+                "role": new_role,
+                "supervisor_name": str(supervisor_name).strip() if new_role == "supervisor" else "",
+                "active": active,
+            }
+            if str(new_password).strip():
+                row["password_hash"] = _encode_pwd_hash(str(new_password).strip())
+
+            if exists_idx:
+                idx = exists_idx[0]
+                for k, v in row.items():
+                    users_df.at[idx, k] = v
+                if "password_hash" not in row:
+                    # keep old hash
+                    pass
+            else:
+                if "password_hash" not in row:
+                    st.error("Password مطلوب عند إنشاء مستخدم جديد")
+                    return
+                users_df = pd.concat([users_df, pd.DataFrame([row])], ignore_index=True)
+
+            _save_users(connector, spreadsheet_id, users_df)
+            st.success("تم الحفظ")
+            st.rerun()
+
+        st.markdown("---")
+        st.markdown("**تعطيل/حذف مستخدم**")
+        target = st.text_input("Username للحذف/التعطيل", key="adm_target_user")
+        col_a, col_b = st.columns(2)
+        with col_a:
+            if st.button("تعطيل"):
+                u = str(target).strip()
+                users_df = _load_users(connector, spreadsheet_id)
+                if (users_df["username"] == u).any():
+                    users_df.loc[users_df["username"] == u, "active"] = "false"
+                    _save_users(connector, spreadsheet_id, users_df)
+                    st.success("تم التعطيل")
                     st.rerun()
                 else:
-                    st.error("Admin PIN غير صحيح")
-            return
+                    st.error("المستخدم غير موجود")
+        with col_b:
+            if st.button("حذف"):
+                u = str(target).strip()
+                users_df = _load_users(connector, spreadsheet_id)
+                before = len(users_df)
+                users_df = users_df[users_df["username"] != u].copy()
+                if len(users_df) == before:
+                    st.error("المستخدم غير موجود")
+                else:
+                    _save_users(connector, spreadsheet_id, users_df)
+                    st.success("تم الحذف")
+                    st.rerun()
 
-        st.success("وضع الأدمن مفعّل")
-        st.info(
-            "لتغيير كلمة المرور بشكل دائم على Streamlit Cloud: حدّث قيمة `app_password` داخل Secrets."
-        )
-        new_pwd = st.text_input("كلمة مرور جديدة", type="password", key="new_app_pwd")
-        new_pwd2 = st.text_input("تأكيد كلمة المرور الجديدة", type="password", key="new_app_pwd2")
-        if st.button("تطبيق (لهذه الجلسة)"):
-            if not new_pwd:
-                st.error("برجاء إدخال كلمة مرور جديدة")
-                return
-            if new_pwd != new_pwd2:
-                st.error("كلمتا المرور غير متطابقتين")
-                return
-            st.session_state["override_app_password"] = new_pwd
-            st.success("تم تطبيق كلمة المرور الجديدة لهذه الجلسة")
+def _filter_for_user(employee_df: pd.DataFrame, shifts_df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    user = st.session_state.get("user") or {}
+    if user.get("role") == "admin":
+        return employee_df, shifts_df
+    supervisor_name = str(user.get("supervisor_name", "")).strip()
+    if not supervisor_name:
+        return employee_df.iloc[0:0].copy(), shifts_df.iloc[0:0].copy()
+
+    supervisor_col = None
+    if "supervisor" in employee_df.columns:
+        supervisor_col = "supervisor"
+    elif "supervisors" in employee_df.columns:
+        supervisor_col = "supervisors"
+    else:
+        for col in employee_df.columns:
+            if "supervisor" in str(col).lower():
+                supervisor_col = col
+                break
+
+    if not supervisor_col:
+        return employee_df.iloc[0:0].copy(), shifts_df.iloc[0:0].copy()
+
+    emp = employee_df.copy()
+    mask = emp[supervisor_col].astype(str).str.strip().str.casefold() == supervisor_name.casefold()
+    filtered_emp = emp[mask].copy()
+
+    if shifts_df is None or shifts_df.empty or "employee_id" not in shifts_df.columns:
+        return filtered_emp, shifts_df
+
+    ids = set(filtered_emp["employee_id"].astype(str).str.strip().unique().tolist()) if "employee_id" in filtered_emp.columns else set()
+    sh = shifts_df.copy()
+    sh["employee_id"] = sh["employee_id"].astype(str).str.strip()
+    filtered_sh = sh[sh["employee_id"].isin(ids)].copy()
+    return filtered_emp, filtered_sh
 
 def apply_custom_table_styling():
     """Apply custom CSS styling for tables with blue headers and no borders."""
@@ -1399,8 +1581,6 @@ def display_contract_report(shift_df, employee_df):
         print(f"Error in contract report display: {str(e)}")
 
 def main():
-    _require_login()
-    _admin_panel()
     # Apply custom table styling for enhanced visual appearance
     apply_custom_table_styling()
 
@@ -1426,6 +1606,11 @@ def main():
             4. تم تفعيل Google Sheets API داخل Google Cloud Console
             """)
             return
+
+        # Auth (Admin/Supervisors)
+        _login_screen(st.session_state["sheets_connector"], SPREADSHEET_ID)
+        _admin_users_panel(st.session_state["sheets_connector"], SPREADSHEET_ID)
+
         col1, col2 = st.columns(2)
         with col1:
             st.subheader("بيانات الرايدرز (تحميل تلقائي من Google Sheets)")
@@ -1442,6 +1627,8 @@ def main():
                         )
                         if employee_df is not None and not employee_df.empty:
                             employee_df.columns = [str(col).strip().lower().replace(' ', '_') for col in employee_df.columns]
+                            # Filter employees based on logged-in user (supervisor sees only their data)
+                            employee_df, _ = _filter_for_user(employee_df, pd.DataFrame())
                             st.session_state['employee_df'] = employee_df
                             st.session_state['employee_refresh'] = False
                             st.success(f"تم تحميل {len(employee_df)} سجل رايدر بنجاح من Google Sheets.")
@@ -1482,6 +1669,8 @@ def main():
                 employee_df = st.session_state.get('employee_df', None)
                 if employee_df is not None and not employee_df.empty:
                     try:
+                        # Ensure filtering applies even when using cached dataframe
+                        employee_df, _ = _filter_for_user(employee_df, pd.DataFrame())
                         # Optimize: Only show essential columns and limit display for large datasets
                         essential_cols = ['employee_id', 'employee_name', 'contract_name', 'city', 'supervisors']
                         display_cols = [col for col in essential_cols if col in employee_df.columns]
@@ -1571,11 +1760,12 @@ def main():
 
             with tab1:
                 filtered_shifts_df = pd.concat(filtered_shifts.values()) if filtered_shifts else pd.DataFrame()
+                employee_df_filtered, shifts_df_filtered = _filter_for_user(employee_df, filtered_shifts_df)
                 display_overview(
-                    employee_df,
-                    filtered_shifts_df,
-                    DataSanitizer.generate_contract_report(filtered_shifts_df, employee_df),
-                    DataSanitizer.generate_city_report(filtered_shifts_df, employee_df)
+                    employee_df_filtered,
+                    shifts_df_filtered,
+                    DataSanitizer.generate_contract_report(shifts_df_filtered, employee_df_filtered),
+                    DataSanitizer.generate_city_report(shifts_df_filtered, employee_df_filtered)
                 )
 
             with tab2:
@@ -1583,19 +1773,24 @@ def main():
                 if len(date_range) > 7:
                     st.info(f"يتم عرض بيانات {len(date_range)} يوم. قد يستغرق ذلك بعض الوقت...")
                 
+                employee_df_filtered, _ = _filter_for_user(employee_df, pd.DataFrame())
                 for date in date_range:
                     date_key = date.date() if hasattr(date, 'date') else date
                     date_shifts = filtered_shifts.get(date_key, pd.DataFrame())
-                    display_unassigned_employees(employee_df, date_shifts, date_key)
+                    _, date_shifts_filtered = _filter_for_user(employee_df_filtered, date_shifts)
+                    display_unassigned_employees(employee_df_filtered, date_shifts_filtered, date_key)
 
             with tab3:
-                display_contract_report(filtered_shifts_df, employee_df)
+                employee_df_filtered, shifts_df_filtered = _filter_for_user(employee_df, filtered_shifts_df)
+                display_contract_report(shifts_df_filtered, employee_df_filtered)
 
             with tab4:
-                display_city_report(filtered_shifts_df, employee_df)
+                employee_df_filtered, shifts_df_filtered = _filter_for_user(employee_df, filtered_shifts_df)
+                display_city_report(shifts_df_filtered, employee_df_filtered)
 
             with tab5:
-                display_supervisors_report(employee_df, filtered_shifts_df, date_range)
+                employee_df_filtered, shifts_df_filtered = _filter_for_user(employee_df, filtered_shifts_df)
+                display_supervisors_report(employee_df_filtered, shifts_df_filtered, date_range)
 
         except Exception as e:
             st.error(f"حدث خطأ: {str(e)}")
