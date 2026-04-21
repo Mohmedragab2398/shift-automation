@@ -1592,10 +1592,9 @@ def main():
     if workflow == "تحديث الشفتات":
         # --- Shifts Update workflow (untouched) ---
         try:
-            sheets_connector = SheetsConnector()
             SPREADSHEET_ID = st.secrets["spreadsheet_id"]
-            if 'sheets_connector' not in st.session_state:
-                st.session_state['sheets_connector'] = sheets_connector
+            if "sheets_connector" not in st.session_state:
+                st.session_state["sheets_connector"] = SheetsConnector()
         except Exception as e:
             st.error(f"خطأ في تهيئة Google Sheets: {str(e)}")
             st.markdown("""
