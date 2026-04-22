@@ -1111,7 +1111,7 @@ def display_supervisors_report(employees_df: pd.DataFrame, shifts_df: pd.DataFra
                     with col3:
                         st.metric("غير حاجز", unassigned_count)
                     with col4:
-        st.metric("نسبة الحاجزين", f"{assignment_rate:.1f}%")
+                        st.metric("نسبة الحاجزين", f"{assignment_rate:.1f}%")
                     
                     # Create two columns for assigned and unassigned
                     col1, col2 = st.columns(2)
