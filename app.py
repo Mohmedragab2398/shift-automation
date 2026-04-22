@@ -763,6 +763,94 @@ def display_unassigned_employees(employees_df: pd.DataFrame, shifts_df: pd.DataF
         import traceback
         logger.error(traceback.format_exc())
 
+def display_reserved_hours(employees_df: pd.DataFrame, shifts_df: pd.DataFrame, selected_date):
+    """Display reserved (assigned) riders for the selected date with planned start/end time."""
+    if employees_df is None or employees_df.empty:
+        st.warning("لا توجد بيانات رايدرز متاحة.")
+        return
+
+    if shifts_df is None or shifts_df.empty:
+        st.info(f"لا توجد شفتات محجوزة بتاريخ {selected_date}")
+        return
+
+    try:
+        employees_df = employees_df.copy()
+        employees_df["employee_id"] = employees_df["employee_id"].astype(str).str.strip()
+
+        shifts_df = shifts_df.copy()
+        if "employee_id" in shifts_df.columns:
+            shifts_df["employee_id"] = shifts_df["employee_id"].astype(str).str.strip()
+
+        # Normalize date
+        if "planned_start_date" in shifts_df.columns:
+            shifts_df["planned_start_date"] = pd.to_datetime(shifts_df["planned_start_date"], errors="coerce").dt.date
+        date_obj = pd.to_datetime(selected_date).date() if isinstance(selected_date, str) else (
+            selected_date.date() if hasattr(selected_date, "date") else selected_date
+        )
+
+        # Filter shifts for date and valid statuses
+        valid_statuses = ["EVALUATED", "PUBLISHED"]
+        if "shift_status" in shifts_df.columns:
+            shifts_for_date = shifts_df[
+                (shifts_df["planned_start_date"] == date_obj) &
+                (shifts_df["shift_status"].isin(valid_statuses))
+            ].copy()
+        else:
+            shifts_for_date = shifts_df[shifts_df["planned_start_date"] == date_obj].copy()
+
+        if shifts_for_date.empty:
+            st.info(f"لا توجد شفتات محجوزة بتاريخ {selected_date}")
+            return
+
+        # Build Planned Start/End Time column
+        start_col = "planned_start_time" if "planned_start_time" in shifts_for_date.columns else None
+        end_col = "planned_end_time" if "planned_end_time" in shifts_for_date.columns else None
+
+        def _fmt_time(v):
+            s = "" if pd.isna(v) else str(v).strip()
+            return s
+
+        if start_col and end_col:
+            shifts_for_date["planned_time_range"] = shifts_for_date[start_col].apply(_fmt_time) + " - " + shifts_for_date[end_col].apply(_fmt_time)
+        elif start_col:
+            shifts_for_date["planned_time_range"] = shifts_for_date[start_col].apply(_fmt_time)
+        else:
+            shifts_for_date["planned_time_range"] = ""
+
+        # One row per rider
+        shifts_for_date = shifts_for_date.drop_duplicates("employee_id")
+
+        merged = shifts_for_date[["employee_id", "planned_time_range"]].merge(
+            employees_df,
+            on="employee_id",
+            how="left"
+        )
+
+        display_cols = [
+            ("employee_id", "Employee ID"),
+            ("employee_name", "Employee Name"),
+            ("city", "City"),
+            ("contract_name", "Contract Name"),
+            ("planned_time_range", "Planned Start/End Time"),
+        ]
+
+        out = pd.DataFrame()
+        for src, _label in display_cols:
+            if src in merged.columns:
+                out[src] = merged[src]
+
+        out = out.rename(columns={src: label for src, label in display_cols if src in out.columns})
+        out = out.fillna("").astype(str)
+
+        st.markdown(f"### الرايدرز الحاجزين بتاريخ {selected_date}")
+        st.dataframe(out, use_container_width=True, hide_index=True)
+
+    except Exception as e:
+        st.error(f"خطأ أثناء عرض عدد ساعات الحاجزين: {str(e)}")
+        logger.error(f"Error in display_reserved_hours: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
+
 def display_supervisors_report(employees_df: pd.DataFrame, shifts_df: pd.DataFrame, date_range):
     """Display supervisors report with sub-tabs for each supervisor showing assigned and unassigned employees."""
     try:
@@ -1749,9 +1837,9 @@ def main():
                 st.error("لا توجد بيانات للتواريخ المختارة")
                 return
 
-            tab1, tab2, tab4, tab5 = st.tabs([
+            tab1, tab2, tab3, tab4 = st.tabs([
                 "نظرة عامة",
-                "الرايدرز غير المسندين",
+                "عدد ساعات الحاجزين",
                 "تقرير المدن",
                 "المشرفون"
             ])
@@ -1776,13 +1864,13 @@ def main():
                     date_key = date.date() if hasattr(date, 'date') else date
                     date_shifts = filtered_shifts.get(date_key, pd.DataFrame())
                     _, date_shifts_filtered = _filter_for_user(employee_df_filtered, date_shifts)
-                    display_unassigned_employees(employee_df_filtered, date_shifts_filtered, date_key)
+                    display_reserved_hours(employee_df_filtered, date_shifts_filtered, date_key)
 
-            with tab4:
+            with tab3:
                 employee_df_filtered, shifts_df_filtered = _filter_for_user(employee_df, filtered_shifts_df)
                 display_city_report(shifts_df_filtered, employee_df_filtered)
 
-            with tab5:
+            with tab4:
                 employee_df_filtered, shifts_df_filtered = _filter_for_user(employee_df, filtered_shifts_df)
                 display_supervisors_report(employee_df_filtered, shifts_df_filtered, date_range)
 
