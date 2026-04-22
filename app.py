@@ -556,26 +556,52 @@ def display_overview(employee_df, shift_df, contract_report_df, city_report_df):
 
     # Only consider valid shift statuses for booking
     valid_statuses = ["EVALUATED", "PUBLISHED"]
-    filtered_shift_df = shift_df[shift_df['shift_status'].isin(valid_statuses)] if 'shift_status' in shift_df.columns else shift_df
+    filtered_shift_df = shift_df[shift_df['shift_status'].isin(valid_statuses)] if (shift_df is not None and 'shift_status' in shift_df.columns) else shift_df
+
+    # Select a date scope for overview
+    scoped_shift_df = filtered_shift_df
+    selected_scope_label = "كل الأيام"
+    if filtered_shift_df is not None and not filtered_shift_df.empty and "planned_start_date" in filtered_shift_df.columns:
+        tmp = filtered_shift_df.copy()
+        tmp["planned_start_date"] = pd.to_datetime(tmp["planned_start_date"], errors="coerce").dt.date
+        available_dates = sorted([d for d in tmp["planned_start_date"].dropna().unique().tolist() if d is not None])
+
+        if available_dates:
+            options = ["كل الأيام"] + [str(d) for d in available_dates]
+            default_idx = 1 if role != "admin" else 0  # supervisors default to first date
+            selected_scope_label = st.selectbox(
+                "اختيار التاريخ (للنظرة العامة)",
+                options,
+                index=min(default_idx, len(options) - 1),
+                key=f"overview_scope_{role}",
+            )
+            if selected_scope_label != "كل الأيام":
+                selected_date = pd.to_datetime(selected_scope_label, errors="coerce").date()
+                scoped_shift_df = tmp[tmp["planned_start_date"] == selected_date].copy()
+            else:
+                scoped_shift_df = tmp
+    elif role != "admin":
+        st.info("ملاحظة: لا يوجد عمود تاريخ داخل بيانات الشفت لعرض ملخص يومي.")
 
     # Calculate overall metrics using only filtered shifts
     total_employees = len(employee_df) if employee_df is not None else 0
-    total_booked = len(filtered_shift_df['employee_id'].unique()) if (filtered_shift_df is not None and not filtered_shift_df.empty and 'employee_id' in filtered_shift_df.columns) else 0
+    total_booked = len(scoped_shift_df['employee_id'].unique()) if (scoped_shift_df is not None and not scoped_shift_df.empty and 'employee_id' in scoped_shift_df.columns) else 0
     total_not_booked = max(total_employees - total_booked, 0)
     not_booked_pct = (total_not_booked / total_employees * 100) if total_employees > 0 else 0.0
 
     # Total booked shift hours (sum across shifts)
     total_booked_hours = 0.0
-    if filtered_shift_df is not None and not filtered_shift_df.empty:
-        start_col = "planned_start_time" if "planned_start_time" in filtered_shift_df.columns else None
-        end_col = "planned_end_time" if "planned_end_time" in filtered_shift_df.columns else None
+    if scoped_shift_df is not None and not scoped_shift_df.empty:
+        start_col = "planned_start_time" if "planned_start_time" in scoped_shift_df.columns else None
+        end_col = "planned_end_time" if "planned_end_time" in scoped_shift_df.columns else None
         if start_col and end_col:
-            hours_series = filtered_shift_df.apply(lambda r: _calc_shift_hours(r.get(start_col), r.get(end_col)), axis=1)
+            hours_series = scoped_shift_df.apply(lambda r: _calc_shift_hours(r.get(start_col), r.get(end_col)), axis=1)
             total_booked_hours = float(pd.to_numeric(hours_series, errors="coerce").fillna(0).sum())
 
     # Supervisor view: compact summary table only
     if role != "admin":
         summary_df = pd.DataFrame([{
+            "التاريخ": selected_scope_label,
             "الإجمالي": int(total_employees),
             "الحاجزين": int(total_booked),
             "غير الحاجزين": int(total_not_booked),
@@ -622,7 +648,7 @@ def display_overview(employee_df, shift_df, contract_report_df, city_report_df):
             for supervisor_name, grp in emp.groupby(supervisor_col):
                 ids = set(grp["employee_id"].astype(str).str.strip().tolist())
                 total_sup = len(ids)
-                sup_shifts = filtered_shift_df[filtered_shift_df["employee_id"].astype(str).str.strip().isin(ids)].copy() if (filtered_shift_df is not None and not filtered_shift_df.empty and "employee_id" in filtered_shift_df.columns) else pd.DataFrame()
+                sup_shifts = scoped_shift_df[scoped_shift_df["employee_id"].astype(str).str.strip().isin(ids)].copy() if (scoped_shift_df is not None and not scoped_shift_df.empty and "employee_id" in scoped_shift_df.columns) else pd.DataFrame()
                 booked_sup = len(sup_shifts["employee_id"].unique()) if (not sup_shifts.empty and "employee_id" in sup_shifts.columns) else 0
                 not_booked_sup = max(total_sup - booked_sup, 0)
                 not_booked_sup_pct = (not_booked_sup / total_sup * 100) if total_sup > 0 else 0.0
@@ -637,6 +663,7 @@ def display_overview(employee_df, shift_df, contract_report_df, city_report_df):
 
                 rows.append({
                     "المشرف": supervisor_name,
+                    "التاريخ": selected_scope_label,
                     "الإجمالي": int(total_sup),
                     "الحاجزين": int(booked_sup),
                     "غير الحاجزين": int(not_booked_sup),
@@ -650,9 +677,19 @@ def display_overview(employee_df, shift_df, contract_report_df, city_report_df):
 
     # Display contract-wise metrics
     st.subheader("التوزيع حسب العقد")
-    if not contract_report_df.empty:
+    contract_report_df_scoped = contract_report_df
+    city_report_df_scoped = city_report_df
+    if selected_scope_label != "كل الأيام":
+        try:
+            contract_report_df_scoped = DataSanitizer.generate_contract_report(scoped_shift_df, employee_df)
+            city_report_df_scoped = DataSanitizer.generate_city_report(scoped_shift_df, employee_df)
+        except Exception:
+            contract_report_df_scoped = contract_report_df
+            city_report_df_scoped = city_report_df
+
+    if contract_report_df_scoped is not None and not contract_report_df_scoped.empty:
         contract_fig = px.bar(
-            contract_report_df,
+            contract_report_df_scoped,
             x='Contract',
             y=['Total', 'Assigned'],
             barmode='group',
@@ -662,9 +699,9 @@ def display_overview(employee_df, shift_df, contract_report_df, city_report_df):
 
     # Display city-wise metrics
     st.subheader("التوزيع حسب المدينة")
-    if not city_report_df.empty:
+    if city_report_df_scoped is not None and not city_report_df_scoped.empty:
         city_fig = px.pie(
-            city_report_df,
+            city_report_df_scoped,
             values='Total',
             names='City',
             title='توزيع الرايدرز حسب المدينة'
