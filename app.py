@@ -530,23 +530,123 @@ def display_overview(employee_df, shift_df, contract_report_df, city_report_df):
     """Display overview with metrics and charts."""
     st.header("نظرة عامة")
 
-    # Only consider valid shift statuses for assignment
+    user = st.session_state.get("user") or {}
+    role = str(user.get("role", "supervisor")).lower()
+
+    def _parse_time_to_minutes(v) -> Optional[int]:
+        if v is None or (isinstance(v, float) and pd.isna(v)) or pd.isna(v):
+            return None
+        s = str(v).strip()
+        if not s:
+            return None
+        t = pd.to_datetime(s, errors="coerce")
+        if pd.isna(t):
+            return None
+        return int(t.hour) * 60 + int(t.minute)
+
+    def _calc_shift_hours(start_v, end_v) -> Optional[float]:
+        start_m = _parse_time_to_minutes(start_v)
+        end_m = _parse_time_to_minutes(end_v)
+        if start_m is None or end_m is None:
+            return None
+        diff = end_m - start_m
+        if diff < 0:
+            diff += 24 * 60
+        return diff / 60.0
+
+    # Only consider valid shift statuses for booking
     valid_statuses = ["EVALUATED", "PUBLISHED"]
     filtered_shift_df = shift_df[shift_df['shift_status'].isin(valid_statuses)] if 'shift_status' in shift_df.columns else shift_df
 
     # Calculate overall metrics using only filtered shifts
-    total_employees = len(employee_df)
-    total_assigned = len(filtered_shift_df['employee_id'].unique()) if not filtered_shift_df.empty else 0
-    overall_percentage = (total_assigned / total_employees * 100) if total_employees > 0 else 0
+    total_employees = len(employee_df) if employee_df is not None else 0
+    total_booked = len(filtered_shift_df['employee_id'].unique()) if (filtered_shift_df is not None and not filtered_shift_df.empty and 'employee_id' in filtered_shift_df.columns) else 0
+    total_not_booked = max(total_employees - total_booked, 0)
+    not_booked_pct = (total_not_booked / total_employees * 100) if total_employees > 0 else 0.0
 
-    # Display overall metrics
-    col1, col2, col3 = st.columns(3)
+    # Total booked shift hours (sum across shifts)
+    total_booked_hours = 0.0
+    if filtered_shift_df is not None and not filtered_shift_df.empty:
+        start_col = "planned_start_time" if "planned_start_time" in filtered_shift_df.columns else None
+        end_col = "planned_end_time" if "planned_end_time" in filtered_shift_df.columns else None
+        if start_col and end_col:
+            hours_series = filtered_shift_df.apply(lambda r: _calc_shift_hours(r.get(start_col), r.get(end_col)), axis=1)
+            total_booked_hours = float(pd.to_numeric(hours_series, errors="coerce").fillna(0).sum())
+
+    # Supervisor view: compact summary table only
+    if role != "admin":
+        summary_df = pd.DataFrame([{
+            "الإجمالي": int(total_employees),
+            "الحاجزين": int(total_booked),
+            "غير الحاجزين": int(total_not_booked),
+            "نسبة غير الحاجزين": f"{not_booked_pct:.1f}%",
+            "إجمالي ساعات الحاجزين": round(total_booked_hours, 2),
+        }])
+        st.dataframe(summary_df, use_container_width=True, hide_index=True)
+        return
+
+    # Admin view: show overall metrics + per-supervisor summary
+    col1, col2, col3, col4 = st.columns(4)
     with col1:
-        st.metric("إجمالي الرايدرز", total_employees)
+        st.metric("إجمالي الرايدرز", int(total_employees))
     with col2:
-        st.metric("إجمالي الحاجزين", total_assigned)
+        st.metric("إجمالي الحاجزين", int(total_booked))
     with col3:
-        st.metric("معدل الإسناد الإجمالي", f"{overall_percentage:.1f}%")
+        st.metric("إجمالي غير الحاجزين", int(total_not_booked))
+    with col4:
+        st.metric("نسبة غير الحاجزين", f"{not_booked_pct:.1f}%")
+
+    st.metric("إجمالي ساعات الحاجزين", f"{total_booked_hours:.2f}")
+
+    # Per-supervisor summary table (admin only)
+    supervisor_col = None
+    if employee_df is not None:
+        if 'supervisor' in employee_df.columns:
+            supervisor_col = 'supervisor'
+        elif 'supervisors' in employee_df.columns:
+            supervisor_col = 'supervisors'
+        else:
+            for col in employee_df.columns:
+                if 'supervisor' in str(col).lower():
+                    supervisor_col = col
+                    break
+
+    if supervisor_col:
+        emp = employee_df.copy()
+        emp["employee_id"] = emp.get("employee_id", pd.Series(dtype=str)).astype(str).str.strip()
+        emp[supervisor_col] = emp[supervisor_col].astype(str).str.strip()
+        emp = emp[emp[supervisor_col].astype(str).str.strip() != ""].copy()
+
+        if not emp.empty:
+            rows = []
+            for supervisor_name, grp in emp.groupby(supervisor_col):
+                ids = set(grp["employee_id"].astype(str).str.strip().tolist())
+                total_sup = len(ids)
+                sup_shifts = filtered_shift_df[filtered_shift_df["employee_id"].astype(str).str.strip().isin(ids)].copy() if (filtered_shift_df is not None and not filtered_shift_df.empty and "employee_id" in filtered_shift_df.columns) else pd.DataFrame()
+                booked_sup = len(sup_shifts["employee_id"].unique()) if (not sup_shifts.empty and "employee_id" in sup_shifts.columns) else 0
+                not_booked_sup = max(total_sup - booked_sup, 0)
+                not_booked_sup_pct = (not_booked_sup / total_sup * 100) if total_sup > 0 else 0.0
+
+                sup_hours = 0.0
+                if not sup_shifts.empty:
+                    start_col = "planned_start_time" if "planned_start_time" in sup_shifts.columns else None
+                    end_col = "planned_end_time" if "planned_end_time" in sup_shifts.columns else None
+                    if start_col and end_col:
+                        hours_series = sup_shifts.apply(lambda r: _calc_shift_hours(r.get(start_col), r.get(end_col)), axis=1)
+                        sup_hours = float(pd.to_numeric(hours_series, errors="coerce").fillna(0).sum())
+
+                rows.append({
+                    "المشرف": supervisor_name,
+                    "الإجمالي": int(total_sup),
+                    "الحاجزين": int(booked_sup),
+                    "غير الحاجزين": int(not_booked_sup),
+                    "نسبة غير الحاجزين": f"{not_booked_sup_pct:.1f}%",
+                    "إجمالي ساعات الحاجزين": round(sup_hours, 2),
+                })
+
+            if rows:
+                st.subheader("ملخص حسب المشرف")
+                st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
 
     # Display contract-wise metrics
     st.subheader("التوزيع حسب العقد")
@@ -574,7 +674,7 @@ def display_overview(employee_df, shift_df, contract_report_df, city_report_df):
 def display_unassigned_employees(employees_df: pd.DataFrame, shifts_df: pd.DataFrame, selected_date: str):
     """Display employees who have no shifts assigned for the selected date."""
     if employees_df is None or employees_df.empty:
-        st.warning("لا توجد بيانات رايدرز متاحة لعرض غير المسندين.")
+        st.warning("لا توجد بيانات رايدرز متاحة لعرض غير الحاجزين.")
         return
 
     # Handle case where shifts_df might be empty (no shifts uploaded yet)
@@ -593,10 +693,10 @@ def display_unassigned_employees(employees_df: pd.DataFrame, shifts_df: pd.DataF
         with col2:
             st.metric("حاجز", assigned_count)
         with col3:
-            st.metric("غير مسند", unassigned_count)
+            st.metric("غير حاجز", unassigned_count)
         
-        st.subheader(f"الرايدرز غير المسندين بتاريخ {selected_date}")
-        st.info("لم يتم رفع بيانات شفتات بعد. سيتم عرض جميع الرايدرز على أنهم غير مسندين.")
+        st.subheader(f"الرايدرز غير الحاجزين بتاريخ {selected_date}")
+        st.info("لم يتم رفع بيانات شفتات بعد. سيتم عرض جميع الرايدرز على أنهم غير حاجزين.")
 
         # Add city filter dropdown with unique key based on date
         # Normalize city names to ensure "Port Said" appears correctly
@@ -625,7 +725,7 @@ def display_unassigned_employees(employees_df: pd.DataFrame, shifts_df: pd.DataF
                 fig = px.pie(
                     values=city_counts.values,
                     names=city_counts.index,
-                    title='الرايدرز غير المسندين حسب المدينة',
+                    title='الرايدرز غير الحاجزين حسب المدينة',
                     hole=0.4,
                     color_discrete_sequence=px.colors.qualitative.Bold
                 )
@@ -700,10 +800,10 @@ def display_unassigned_employees(employees_df: pd.DataFrame, shifts_df: pd.DataF
         with col2:
             st.metric("حاجز", assigned_count)
         with col3:
-            st.metric("غير مسند", unassigned_count)
+            st.metric("غير حاجز", unassigned_count)
 
         if not unassigned_df.empty:
-            st.subheader(f"الرايدرز غير المسندين بتاريخ {selected_date}")
+            st.subheader(f"الرايدرز غير الحاجزين بتاريخ {selected_date}")
 
             # Add city filter dropdown with unique key based on date
             # Normalize city names to ensure "Port Said" appears correctly
@@ -732,7 +832,7 @@ def display_unassigned_employees(employees_df: pd.DataFrame, shifts_df: pd.DataF
                     fig = px.pie(
                         values=city_counts.values,
                         names=city_counts.index,
-                        title='الرايدرز غير المسندين حسب المدينة',
+                        title='الرايدرز غير الحاجزين حسب المدينة',
                         hole=0.4,
                         color_discrete_sequence=px.colors.qualitative.Bold
                     )
@@ -758,7 +858,7 @@ def display_unassigned_employees(employees_df: pd.DataFrame, shifts_df: pd.DataF
             st.success(f"جميع الرايدرز لديهم شفتات محجوزة بتاريخ {selected_date}")
 
     except Exception as e:
-        st.error(f"خطأ أثناء عرض الرايدرز غير المسندين: {str(e)}")
+        st.error(f"خطأ أثناء عرض الرايدرز غير الحاجزين: {str(e)}")
         logger.error(f"Error in display_unassigned_employees: {str(e)}")
         import traceback
         logger.error(traceback.format_exc())
@@ -972,9 +1072,9 @@ def display_supervisors_report(employees_df: pd.DataFrame, shifts_df: pd.DataFra
                     with col2:
                         st.metric("حاجز", assigned_count)
                     with col3:
-                        st.metric("غير مسند", unassigned_count)
+                        st.metric("غير حاجز", unassigned_count)
                     with col4:
-                        st.metric("معدل الإسناد", f"{assignment_rate:.1f}%")
+        st.metric("نسبة غير الحاجزين", f"{(100 - assignment_rate):.1f}%")
                     
                     # Create two columns for assigned and unassigned
                     col1, col2 = st.columns(2)
@@ -993,7 +1093,7 @@ def display_supervisors_report(employees_df: pd.DataFrame, shifts_df: pd.DataFra
                             st.info("لا يوجد رايدرز حاجزين لهذا التاريخ.")
                     
                     with col2:
-                        st.markdown(f"#### ❌ الرايدرز غير المسندين ({unassigned_count})")
+                        st.markdown(f"#### ❌ الرايدرز غير الحاجزين ({unassigned_count})")
                         if not unassigned_employees.empty:
                             display_cols = ['employee_id', 'employee_name', 'city', 'contract_name']
                             display_cols = [col for col in display_cols if col in unassigned_employees.columns]
@@ -1048,9 +1148,9 @@ def display_city_report(data, employee_data):
                 with col2:
                     st.metric("إجمالي الحاجزين", int(assigned))
                 with col3:
-                    st.metric("إجمالي غير المسندين", int(unassigned))
+                    st.metric("إجمالي غير الحاجزين", int(unassigned))
                 with col4:
-                    st.metric("معدل الإسناد الإجمالي", f"{assignment_rate:.1f}%")
+                    st.metric("نسبة غير الحاجزين", f"{(100 - assignment_rate):.1f}%")
                 for date in dates:
                     date_str = pd.to_datetime(date).strftime('%d-%m')
                     date_data = city_data[city_data['Date'] == date]
@@ -1172,7 +1272,7 @@ def display_city_report(data, employee_data):
                         if total_employees > 0:
                             # Create a donut chart showing Assigned vs Unassigned percentage
                             fig = go.Figure(data=[go.Pie(
-                                labels=['حاجز', 'غير مسند'],
+                                labels=['حاجز', 'غير حاجز'],
                                 values=[total_assigned, total_unassigned],
                                 hole=0.6,  # This creates the donut effect
                                 marker_colors=['#28a745', '#dc3545'],
@@ -1185,7 +1285,7 @@ def display_city_report(data, employee_data):
                             
                             # Add title and center text
                             fig.update_layout(
-                                title=f'حالة الإسناد في {city} بتاريخ {date_str}',
+                                title=f'حالة الحجز في {city} بتاريخ {date_str}',
                                 annotations=[dict(
                                     text=f'<b>{assigned_percentage:.1f}%<br>حاجز</b>',
                                     x=0.5,
@@ -1355,7 +1455,7 @@ def create_donut_chart(assigned, unassigned, title):
 
     # Create donut chart
     fig = go.Figure(data=[go.Pie(
-        labels=['حاجز', 'غير مسند'],
+        labels=['حاجز', 'غير حاجز'],
         values=[assigned, unassigned],
         hole=0.6,
         marker_colors=['#28a745', '#dc3545']
@@ -1412,9 +1512,9 @@ def display_contract_report(shift_df, employee_df):
                 with col2:
                     st.metric("إجمالي الحاجزين", int(assigned))
                 with col3:
-                    st.metric("إجمالي غير المسندين", int(unassigned))
+                    st.metric("إجمالي غير الحاجزين", int(unassigned))
                 with col4:
-                    st.metric("معدل الإسناد الإجمالي", f"{assignment_rate:.1f}%")
+                    st.metric("نسبة غير الحاجزين", f"{(100 - assignment_rate):.1f}%")
 
                 # Per-day tables
                 for date in dates:
