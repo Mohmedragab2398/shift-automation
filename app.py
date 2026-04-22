@@ -810,6 +810,28 @@ def display_reserved_hours(employees_df: pd.DataFrame, shifts_df: pd.DataFrame, 
             s = "" if pd.isna(v) else str(v).strip()
             return s
 
+        def _parse_time_to_minutes(v) -> Optional[int]:
+            if v is None or (isinstance(v, float) and pd.isna(v)) or pd.isna(v):
+                return None
+            s = str(v).strip()
+            if not s:
+                return None
+            # common formats: "10:00", "10:00:00", "10:00 AM", "2026-01-01 10:00:00"
+            t = pd.to_datetime(s, errors="coerce")
+            if pd.isna(t):
+                return None
+            return int(t.hour) * 60 + int(t.minute)
+
+        def _calc_shift_hours(start_v, end_v) -> Optional[float]:
+            start_m = _parse_time_to_minutes(start_v)
+            end_m = _parse_time_to_minutes(end_v)
+            if start_m is None or end_m is None:
+                return None
+            diff = end_m - start_m
+            if diff < 0:
+                diff += 24 * 60  # crosses midnight
+            return diff / 60.0
+
         if start_col and end_col:
             shifts_for_date["planned_time_range"] = shifts_for_date[start_col].apply(_fmt_time) + " - " + shifts_for_date[end_col].apply(_fmt_time)
         elif start_col:
@@ -817,10 +839,18 @@ def display_reserved_hours(employees_df: pd.DataFrame, shifts_df: pd.DataFrame, 
         else:
             shifts_for_date["planned_time_range"] = ""
 
+        if start_col and end_col:
+            shifts_for_date["shift_hours"] = shifts_for_date.apply(
+                lambda r: _calc_shift_hours(r.get(start_col), r.get(end_col)),
+                axis=1,
+            )
+        else:
+            shifts_for_date["shift_hours"] = None
+
         # One row per rider
         shifts_for_date = shifts_for_date.drop_duplicates("employee_id")
 
-        merged = shifts_for_date[["employee_id", "planned_time_range"]].merge(
+        merged = shifts_for_date[["employee_id", "planned_time_range", "shift_hours"]].merge(
             employees_df,
             on="employee_id",
             how="left"
@@ -832,6 +862,7 @@ def display_reserved_hours(employees_df: pd.DataFrame, shifts_df: pd.DataFrame, 
             ("city", "City"),
             ("contract_name", "Contract Name"),
             ("planned_time_range", "Planned Start/End Time"),
+            ("shift_hours", "Shift Hours"),
         ]
 
         out = pd.DataFrame()
@@ -840,7 +871,9 @@ def display_reserved_hours(employees_df: pd.DataFrame, shifts_df: pd.DataFrame, 
                 out[src] = merged[src]
 
         out = out.rename(columns={src: label for src, label in display_cols if src in out.columns})
-        out = out.fillna("").astype(str)
+        if "Shift Hours" in out.columns:
+            out["Shift Hours"] = pd.to_numeric(out["Shift Hours"], errors="coerce").round(2)
+        out = out.fillna("")
 
         st.markdown(f"### الرايدرز الحاجزين بتاريخ {selected_date}")
         st.dataframe(out, use_container_width=True, hide_index=True)
