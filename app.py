@@ -587,7 +587,7 @@ def display_overview(employee_df, shift_df, contract_report_df, city_report_df):
     total_employees = len(employee_df) if employee_df is not None else 0
     total_booked = len(scoped_shift_df['employee_id'].unique()) if (scoped_shift_df is not None and not scoped_shift_df.empty and 'employee_id' in scoped_shift_df.columns) else 0
     total_not_booked = max(total_employees - total_booked, 0)
-    not_booked_pct = (total_not_booked / total_employees * 100) if total_employees > 0 else 0.0
+    booked_pct = (total_booked / total_employees * 100) if total_employees > 0 else 0.0
 
     # Total booked shift hours (sum across shifts)
     total_booked_hours = 0.0
@@ -605,7 +605,7 @@ def display_overview(employee_df, shift_df, contract_report_df, city_report_df):
             "الإجمالي": int(total_employees),
             "الحاجزين": int(total_booked),
             "غير الحاجزين": int(total_not_booked),
-            "نسبة غير الحاجزين": f"{not_booked_pct:.1f}%",
+            "نسبة الحاجزين": f"{booked_pct:.1f}%",
             "إجمالي ساعات الحاجزين": round(total_booked_hours, 2),
         }])
         st.dataframe(summary_df, use_container_width=True, hide_index=True)
@@ -620,7 +620,7 @@ def display_overview(employee_df, shift_df, contract_report_df, city_report_df):
     with col3:
         st.metric("إجمالي غير الحاجزين", int(total_not_booked))
     with col4:
-        st.metric("نسبة غير الحاجزين", f"{not_booked_pct:.1f}%")
+        st.metric("نسبة الحاجزين", f"{booked_pct:.1f}%")
 
     st.metric("إجمالي ساعات الحاجزين", f"{total_booked_hours:.2f}")
 
@@ -651,7 +651,7 @@ def display_overview(employee_df, shift_df, contract_report_df, city_report_df):
                 sup_shifts = scoped_shift_df[scoped_shift_df["employee_id"].astype(str).str.strip().isin(ids)].copy() if (scoped_shift_df is not None and not scoped_shift_df.empty and "employee_id" in scoped_shift_df.columns) else pd.DataFrame()
                 booked_sup = len(sup_shifts["employee_id"].unique()) if (not sup_shifts.empty and "employee_id" in sup_shifts.columns) else 0
                 not_booked_sup = max(total_sup - booked_sup, 0)
-                not_booked_sup_pct = (not_booked_sup / total_sup * 100) if total_sup > 0 else 0.0
+                booked_sup_pct = (booked_sup / total_sup * 100) if total_sup > 0 else 0.0
 
                 sup_hours = 0.0
                 if not sup_shifts.empty:
@@ -667,7 +667,7 @@ def display_overview(employee_df, shift_df, contract_report_df, city_report_df):
                     "الإجمالي": int(total_sup),
                     "الحاجزين": int(booked_sup),
                     "غير الحاجزين": int(not_booked_sup),
-                    "نسبة غير الحاجزين": f"{not_booked_sup_pct:.1f}%",
+                    "نسبة الحاجزين": f"{booked_sup_pct:.1f}%",
                     "إجمالي ساعات الحاجزين": round(sup_hours, 2),
                 })
 
@@ -1111,7 +1111,7 @@ def display_supervisors_report(employees_df: pd.DataFrame, shifts_df: pd.DataFra
                     with col3:
                         st.metric("غير حاجز", unassigned_count)
                     with col4:
-                        st.metric("نسبة غير الحاجزين", f"{(100 - assignment_rate):.1f}%")
+        st.metric("نسبة الحاجزين", f"{assignment_rate:.1f}%")
                     
                     # Create two columns for assigned and unassigned
                     col1, col2 = st.columns(2)
@@ -1187,7 +1187,7 @@ def display_city_report(data, employee_data):
                 with col3:
                     st.metric("إجمالي غير الحاجزين", int(unassigned))
                 with col4:
-                    st.metric("نسبة غير الحاجزين", f"{(100 - assignment_rate):.1f}%")
+                    st.metric("نسبة الحاجزين", f"{assignment_rate:.1f}%")
                 for date in dates:
                     date_str = pd.to_datetime(date).strftime('%d-%m')
                     date_data = city_data[city_data['Date'] == date]
@@ -1551,7 +1551,7 @@ def display_contract_report(shift_df, employee_df):
                 with col3:
                     st.metric("إجمالي غير الحاجزين", int(unassigned))
                 with col4:
-                    st.metric("نسبة غير الحاجزين", f"{(100 - assignment_rate):.1f}%")
+                    st.metric("نسبة الحاجزين", f"{assignment_rate:.1f}%")
 
                 # Per-day tables
                 for date in dates:
